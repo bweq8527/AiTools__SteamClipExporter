@@ -1,0 +1,160 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f4f4f9;
+    color: #333;
+    margin: 0;
+    padding: 20px;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: #fff;
+    padding: 30px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+}
+
+h1 {
+    color: #1e88e5;
+    text-align: center;
+    border-bottom: 2px solid #eee;
+    padding-bottom: 10px;
+}
+
+.section {
+    margin-bottom: 25px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background-color: #fafafa;
+}
+
+h2 {
+    color: #333;
+    margin-top: 0;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+.path-setting input[type="text"] {
+    width: 70%;
+    padding: 10px;
+    margin-right: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+button {
+    padding: 10px 15px;
+    background-color: #1e88e5;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+}
+
+button:hover:not(:disabled) {
+    background-color: #1565c0;
+}
+
+button:disabled {
+    background-color: #999;
+    cursor: not-allowed;
+}
+
+.status-msg {
+    margin-top: 10px;
+    font-weight: bold;
+    color: #4CAF50;
+}
+
+.main-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.clip-list {
+    grid-column: 1 / 2;
+}
+
+.conversion-queue {
+    grid-column: 2 / 3;
+}
+
+.progress-chart {
+    grid-column: 1 / 3; /* 进度图表占据两列 */
+}
+
+#clipListContainer {
+    max-height: 400px;
+    overflow-y: auto;
+    border: 1px solid #eee;
+    padding: 5px;
+    margin-bottom: 10px;
+}
+
+.clip-item {
+    padding: 8px;
+    margin-bottom: 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.1s;
+    border-left: 5px solid transparent;
+}
+
+.clip-item:hover {
+    background-color: #f0f0f0;
+}
+
+.clip-item.selected {
+    background-color: #e3f2fd;
+    border-left: 5px solid #1e88e5;
+}
+
+.clip-item.converted {
+    background-color: #e8f5e9;
+    color: #666;
+    cursor: default;
+    border-left: 5px solid #4CAF50;
+}
+
+.clip-item.in-queue {
+    background-color: #fff3e0;
+    color: #666;
+    cursor: default;
+    border-left: 5px solid #ff9800;
+}
+
+/* 队列显示样式 */
+#queueContainer div {
+    padding: 10px;
+    margin-bottom: 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+}
+
+#queueContainer .running {
+    background-color: #e3f2fd;
+    border-color: #1e88e5;
+}
+
+#queueContainer .pending {
+    background-color: #f3f3f3;
+    border-color: #aaa;
+}
+
+#queueContainer .error {
+    background-color: #ffebee;
+    border-color: #e53935;
+    color: #e53935;
+    font-weight: bold;
+}
+
+progress {
+    width: 100%;
+    height: 15px;
+    margin-top: 5px;
+}
