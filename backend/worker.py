@@ -2,84 +2,99 @@ import os
 import glob
 import re
 import subprocess
-import time
 
 
-def get_stream_files(stream_folder, stream_index):
-    """获取指定索引流的初始化文件和排序后的碎片文件"""
-    init_file = os.path.join(stream_folder, f'init-stream{stream_index}.m4s')
-    chunk_files = glob.glob(os.path.join(stream_folder, f'chunk-stream{stream_index}-*.m4s'))
-
-    if not os.path.exists(init_file) or not chunk_files:
+def get_stream_files(stream_folder, idx):
+    """获取 init 和 chunk 碎片并排序"""
+    init = os.path.join(stream_folder, f'init-stream{idx}.m4s')
+    chunks = glob.glob(os.path.join(stream_folder, f'chunk-stream{idx}-*.m4s'))
+    if not os.path.exists(init) or not chunks:
         return None, None
 
-    def sort_key(f):
-        match = re.search(rf'chunk-stream{stream_index}-(\d+)\.m4s', os.path.basename(f))
-        return int(match.group(1)) if match else 0
+    def skey(f):
+        m = re.search(rf'chunk-stream{idx}-(\d+)\.m4s', os.path.basename(f))
+        return int(m.group(1)) if m else 0
 
-    chunk_files.sort(key=sort_key)
-    return init_file, chunk_files
+    chunks.sort(key=skey)
+    return init, chunks
 
 
-def merge_files(init, chunks, output):
-    """通用的二进制合并函数"""
-    with open(output, "wb") as outfile:
-        with open(init, "rb") as infile:
-            outfile.write(infile.read())
-        for chunk in chunks:
-            with open(chunk, "rb") as infile:
-                outfile.write(infile.read())
+def merge_bin(init, chunks, out):
+    """合并二进制碎片"""
+    with open(out, "wb") as f_out:
+        with open(init, "rb") as f_in: f_out.write(f_in.read())
+        for c in chunks:
+            with open(c, "rb") as f_in: f_out.write(f_in.read())
 
+
+def generate_quick_thumb(clip_folder, thumb_path):
+    """在转换前，尝试从第一个分片中快速提取预览图"""
+    if os.path.exists(thumb_path): return  # 已存在则跳过
+
+    s_dirs = glob.glob(os.path.join(clip_folder, 'video', 'fg_*'))
+    if not s_dirs: return
+
+    s_folder = s_dirs[0]
+    # 获取第一个分片 (chunk-stream0-00001.m4s)
+    init = os.path.join(s_folder, 'init-stream0.m4s')
+    first_chunk = os.path.join(s_folder, 'chunk-stream0-00001.m4s')
+
+    if not os.path.exists(first_chunk): return
+
+    # 临时组合极小片段用于截图
+    tmp_mini = os.path.join(s_folder, "mini_thumb.tmp")
+    try:
+        with open(tmp_mini, "wb") as f_out:
+            with open(init, "rb") as f_in: f_out.write(f_in.read())
+            with open(first_chunk, "rb") as f_in: f_out.write(f_in.read())
+
+        # FFmpeg 快速截图
+        subprocess.run(['ffmpeg', '-y', '-i', tmp_mini, '-vframes', '1', thumb_path],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    finally:
+        if os.path.exists(tmp_mini): os.remove(tmp_mini)
 
 def convert_clip(clip_folder, output_path, status_dict):
-    stream_dirs = glob.glob(os.path.join(clip_folder, 'video', 'fg_*'))
-    if not stream_dirs:
-        status_dict.update({'status': 'error', 'message': '未找到视频流目录'})
+    cid = os.path.basename(clip_folder)
+    s_dirs = glob.glob(os.path.join(clip_folder, 'video', 'fg_*'))
+    if not s_dirs:
+        status_dict.update({'status': 'error', 'message': '找不到数据流'})
         return
 
-    stream_folder = stream_dirs[0]
-    v_init, v_chunks = get_stream_files(stream_folder, 0)  # Stream 0 视频
-    a_init, a_chunks = get_stream_files(stream_folder, 1)  # Stream 1 音频
+    s_folder = s_dirs[0]
+    v_init, v_chunks = get_stream_files(s_folder, 0)  # 视频
+    a_init, a_chunks = get_stream_files(s_folder, 1)  # 音频
 
-    if not v_init:
-        status_dict.update({'status': 'error', 'message': '视频流缺失'})
-        return
-
-    temp_v = os.path.join(stream_folder, "temp_v.mp4")
-    temp_a = os.path.join(stream_folder, "temp_a.mp4")
+    tmp_v = os.path.join(s_folder, "v.tmp")
+    tmp_a = os.path.join(s_folder, "a.tmp")
 
     try:
-        # 1. 合并视频
-        status_dict['eta'] = "正在合并视频轨..."
-        merge_files(v_init, v_chunks, temp_v)
-        status_dict['progress'] = 50
-
-        # 2. 合并音频 (如果有)
-        has_audio = False
+        status_dict['eta'] = "正在合并素材..."
+        merge_bin(v_init, v_chunks, tmp_v)
+        has_a = False
         if a_init:
-            status_dict['eta'] = "正在合并音频轨..."
-            merge_files(a_init, a_chunks, temp_a)
-            has_audio = True
+            merge_bin(a_init, a_chunks, tmp_a)
+            has_a = True
 
-        # 3. 使用 FFmpeg 混合
-        status_dict['eta'] = "FFmpeg 正在封装音视频..."
-        cmd = ['ffmpeg', '-y']
-        cmd += ['-i', temp_v]
-        if has_audio:
-            cmd += ['-i', temp_a]
+        status_dict['progress'] = 80
+        status_dict['eta'] = "FFmpeg 封装中..."
 
-        # 映射流并输出
+        # FFmpeg 合并音视频
+        cmd = ['ffmpeg', '-y', '-i', tmp_v]
+        if has_a: cmd += ['-i', tmp_a]
         cmd += ['-c', 'copy', output_path]
 
-        print(f"执行命令: {' '.join(cmd)}")
         subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        # 提取第2秒预览图
+        t_path = os.path.join(os.path.dirname(output_path), f"{cid}.jpg")
+        subprocess.run(['ffmpeg', '-y', '-i', output_path, '-ss', '00:00:02', '-vframes', '1', t_path],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
         status_dict['progress'] = 100
         status_dict['eta'] = "完成"
-
     except Exception as e:
-        status_dict.update({'status': 'error', 'message': f"转换失败: {str(e)}"})
+        status_dict.update({'status': 'error', 'message': str(e)})
     finally:
-        # 清理
-        for f in [temp_v, temp_a]:
+        for f in [tmp_v, tmp_a]:
             if os.path.exists(f): os.remove(f)
