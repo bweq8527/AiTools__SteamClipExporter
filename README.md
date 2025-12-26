@@ -22,7 +22,7 @@
 
 ​	在IDE环境下运行build.py，等待脚本自动打包结束后在dist文件夹下获取EXE文件。
 
-> 方法2、3需配置环境并安装相应依赖项
+> 方法2、3需配置环境并安装相应依赖项FFmpeg (必须下载并将其 bin 目录添加到系统环境变量 Path 中)
 
 **操作步骤**
 
@@ -34,24 +34,3 @@
 
 **版权声明**
 	集成了开源项目 FFmpeg (LGPL v2.1) 用于多媒体处理。
-
-
-
-一、 运行环境要求：
-
-1. Python 3.x (推荐安装并配置好环境变量)
-2. FFmpeg (必须下载并将其 bin 目录添加到系统环境变量 Path 中，否则转换将失败)
-
-二、 部署步骤：
-
-1. 安装 Python 依赖：
-   打开命令行 (CMD 或 PowerShell)，进入 SteamConverter/backend 目录，执行以下命令：
-
-   cd backend
-   pip install Flask flask-cors
-
-2. 运行服务器：
-   双击根目录下的 run_server.bat 文件
-
-3. 访问前端界面：
-   服务器启动后，在浏览器中访问： http://127.0.0.1:5000/
