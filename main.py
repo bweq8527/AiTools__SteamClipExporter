@@ -4,30 +4,36 @@ import threading
 import webview
 from backend.app import app
 
+
 def get_base_path():
-    """获取程序运行时的根目录，适配开发环境和 PyInstaller 环境"""
-    if hasattr(sys, '_MEIPASS'):
-        return sys._MEIPASS
+    if hasattr(sys, '_MEIPASS'): return sys._MEIPASS
     return os.path.abspath(".")
 
+
 def start_flask():
-    # 商业版建议关闭 debug 模式
-    app.run(port=5000, debug=False, threaded=True)
+    # 彻底关闭 debug，防止干扰
+    app.run(port=5000, debug=False, threaded=True, host='127.0.0.1')
+
 
 if __name__ == '__main__':
-    # 启动后台 Flask 线程
-    t = threading.Thread(target=start_flask, daemon=True)
-    t.start()
+    # 1. 启动 Flask 线程
+    threading.Thread(target=start_flask, daemon=True).start()
 
-    # 创建原生桌面窗口
-    # url 直接指向 Flask 地址
+    # 2. 获取图标路径
+    icon_p = os.path.join(get_base_path(), "app_icon.ico")
+
+    # 3. 创建原生窗口 (移除报错的 icon 参数)
     window = webview.create_window(
-        title='Steam Recorder Converter Pro',
+        title='Steam Video Converter Pro',
         url='http://127.0.0.1:5000',
-        width=1200,
-        height=800,
+        width=1100,
+        height=750,
         background_color='#121212'
     )
 
-    # 启动窗口，不使用浏览器，直接在 native 窗口运行
-    webview.start()
+    # 4. 在 start 函数中通过 icon 参数设置图标
+    # 这样设置会同时应用到窗口左上角和任务栏
+    if os.path.exists(icon_p):
+        webview.start(debug=False, icon=icon_p)
+    else:
+        webview.start(debug=False)
