@@ -6,44 +6,52 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { background: #121212; color: #e0e0e0; font-family: sans-serif; padding: 20px; }
+        body { background: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 20px; }
         .container { max-width: 1100px; margin: 0 auto; }
         .box { background: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        input { background: #2c2c2c; border: 1px solid #333; color: #fff; padding: 10px; width: 60%; border-radius: 4px; }
-        button { background: #0d47a1; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+        .path-group { display: flex; gap: 10px; align-items: center; }
+        input { background: #2c2c2c; border: 1px solid #333; color: #fff; padding: 10px; flex-grow: 1; border-radius: 4px; outline: none; }
+        button { background: #0d47a1; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; transition: 0.3s; white-space: nowrap; }
         button:hover { background: #1565c0; }
-        button:disabled { background: #444; }
+        button.secondary { background: #454545; }
+        button.secondary:hover { background: #555; }
+        button:disabled { background: #444; cursor: not-allowed; }
         .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
-        .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; max-height: 500px; overflow-y: auto; }
-        .item { background: #252525; border-radius: 6px; overflow: hidden; border: 2px solid transparent; cursor: pointer; transition: 0.2s; }
-        .item:hover { background: #333; }
+        .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; max-height: 500px; overflow-y: auto; padding: 10px; }
+        .item { background: #252525; border-radius: 6px; overflow: hidden; border: 2px solid transparent; cursor: pointer; transition: 0.2s; position: relative; }
+        .item:hover { background: #333; transform: translateY(-2px); }
         .item.selected { border-color: #2196f3; background: #2c3e50; }
-        .item.done { opacity: 0.5; border-color: #4caf50; cursor: default; }
+        .item.done { opacity: 0.6; border-color: #4caf50; }
         .img-box { width: 100%; height: 100px; background: #000; display: flex; align-items: center; justify-content: center; font-size: 12px; }
         .img-box img { width: 100%; height: 100%; object-fit: cover; }
-        .q-item { background: #252525; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 13px; }
-        progress { width: 100%; }
+        .q-item { background: #252525; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 13px; border-left: 4px solid #2196f3; }
+        progress { width: 100%; height: 10px; accent-color: #2196f3; }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="box">
             <h2>Steam 录像自动转换工具</h2>
-            <input type="text" id="p" placeholder="路径: H:\录屏工作目录\Steam">
-            <button onclick="setP()">扫描目录</button>
-            <p id="msg" style="color:#4caf50"></p>
+            <div class="path-group">
+                <input type="text" id="p" placeholder="请选择或输入 Steam 录制库路径...">
+                <button class="secondary" onclick="browse()">选择目录</button>
+                <button onclick="setP()">开始扫描</button>
+            </div>
+            <p id="msg" style="color:#4caf50; margin-top: 10px; font-size: 14px;"></p>
         </div>
         <div class="grid">
             <div class="box">
-                <div style="display:flex; justify-content: space-between; margin-bottom:10px;">
-                    <span>待处理素材</span>
-                    <button id="qBtn" onclick="addQ()" disabled>加入队列</button>
+                <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom:10px;">
+                    <span style="font-weight: bold;">待处理素材</span>
+                    <button id="qBtn" onclick="addQ()" disabled>加入转换队列</button>
                 </div>
                 <div id="list" class="list"></div>
             </div>
             <div class="box">
-                <span>转换进度</span>
-                <canvas id="chart" style="margin:10px 0;"></canvas>
+                <span style="font-weight: bold;">转换实时状态</span>
+                <canvas id="chart" style="margin:10px 0; max-height: 150px;"></canvas>
                 <div id="qList"></div>
             </div>
         </div>
@@ -52,15 +60,33 @@
         let sel = [], chart = null;
         function initChart() {
             chart = new Chart(document.getElementById('chart'), {
-                type: 'bar', data: { labels: [], datasets: [{ label: '进度%', data: [], backgroundColor: '#2196f3' }] },
-                options: { indexAxis: 'y', scales: { x: { max:100, min:0 } } }
+                type: 'bar', 
+                data: { labels: [], datasets: [{ label: '进度%', data: [], backgroundColor: '#2196f3' }] },
+                options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { max:100, min:0, grid: { color: '#333' } }, y: { grid: { display: false } } } }
             });
         }
+        async function browse() {
+            try {
+                const res = await axios.get('/api/select_folder');
+                if(res.data.success && res.data.path) {
+                    document.getElementById('p').value = res.data.path;
+                    setP();
+                }
+            } catch(e) { console.error("Dialog error", e); }
+        }
         async function setP() {
-            const res = await axios.post('/api/set_path', { path: document.getElementById('p').value });
-            document.getElementById('msg').innerText = res.data.message;
-            load();
-            if(!window.timer) window.timer = setInterval(tick, 1000);
+            const pVal = document.getElementById('p').value;
+            if(!pVal) return;
+            try {
+                const res = await axios.post('/api/set_path', { path: pVal });
+                document.getElementById('msg').innerText = res.data.message;
+                document.getElementById('msg').style.color = "#4caf50";
+                load();
+                if(!window.timer) window.timer = setInterval(tick, 1000);
+            } catch(e) {
+                document.getElementById('msg').innerText = "路径无效或目录不存在";
+                document.getElementById('msg').style.color = "#ff5252";
+            }
         }
         async function load() {
             const res = await axios.get('/api/clips');
@@ -68,7 +94,10 @@
             res.data.clips.forEach(c => {
                 const el = document.createElement('div');
                 el.className = `item ${c.is_converted?'done':''} ${sel.includes(c.id)?'selected':''}`;
-                el.innerHTML = `<div class="img-box">${c.thumb?`<img src="${c.thumb}?t=${Date.now()}">`:'无预览'}</div><div style="padding:5px;font-size:11px">${c.id.slice(-15)}</div>`;
+                el.innerHTML = `
+                    <div class="img-box">${c.thumb?`<img src="${c.thumb}?t=${Date.now()}">`:'无预览'}</div>
+                    <div style="padding:8px;font-size:11px; text-align:center;">${c.id.replace('clip_', '')}</div>
+                `;
                 if(!c.is_converted) el.onclick = () => {
                     if(sel.includes(c.id)) sel = sel.filter(i=>i!==c.id); else sel.push(c.id);
                     document.getElementById('qBtn').disabled = sel.length===0;
@@ -85,16 +114,25 @@
             const res = await axios.get('/api/progress');
             const stats = res.data.all_statuses;
             const qDiv = document.getElementById('qList'); qDiv.innerHTML = '';
-            let lbs = [], dat = [], hasDone = false;
+            let lbs = [], dat = [], hasUpdate = false;
             for(let id in stats) {
-                if(stats[id].status === 'running' || stats[id].status === 'pending') {
-                    lbs.push(id.slice(-10)); dat.push(stats[id].progress);
-                    qDiv.innerHTML += `<div class="q-item"><b>${id.slice(-15)}</b><br><small>${stats[id].eta}</small><progress value="${stats[id].progress}" max="100"></progress></div>`;
+                const s = stats[id];
+                if(s.status === 'running' || s.status === 'pending') {
+                    lbs.push(id.slice(-8)); dat.push(s.progress);
+                    qDiv.innerHTML += `
+                        <div class="q-item">
+                            <b>${id}</b><br>
+                            <small>${s.eta}</small>
+                            <progress value="${s.progress}" max="100"></progress>
+                        </div>`;
                 }
-                if(stats[id].progress === 100) hasDone = true;
+                if(s.status === 'finished') {
+                    hasUpdate = true;
+                    delete stats[id]; // 处理完从列表移除
+                }
             }
-            chart.data.labels = lbs; chart.data.datasets[0].data = dat; chart.update();
-            if(hasDone) load();
+            chart.data.labels = lbs; chart.data.datasets[0].data = dat; chart.update('none');
+            if(hasUpdate) load();
         }
         document.addEventListener('DOMContentLoaded', initChart);
     </script>
