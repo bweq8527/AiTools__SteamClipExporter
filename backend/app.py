@@ -20,7 +20,7 @@ def get_res_path(rel_path):
     if hasattr(sys, '_MEIPASS'): return os.path.join(sys._MEIPASS, rel_path)
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), rel_path)
 
-app = Flask(__name__, static_folder=get_res_path('frontend'))
+app = Flask(__name__, static_folder=get_res_path('frontend'), static_url_path='')
 CORS(app)
 
 CONVERSION_QUEUE = queue.Queue()
