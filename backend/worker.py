@@ -95,12 +95,14 @@ def convert_clip(folder, out, status):
         )
 
         for line in process.stdout:
+            # 记录 ffmpeg 原始消息
+            status['last_raw_log'] = line.strip()
+
             if 'out_time_ms' in line and duration > 0:
                 ms_match = re.search(r'out_time_ms=(\d+)', line)
                 if ms_match:
                     curr_ms = int(ms_match.group(1))
                     curr_sec = curr_ms / 1000000.0
-                    # 映射 15% 到 99% 的区间
                     real_p = 15 + int((curr_sec / duration) * 84)
                     status['progress'] = min(real_p, 99)
                     status['eta'] = f"处理中: {int(curr_sec)}s / {int(duration)}s"

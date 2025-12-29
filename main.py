@@ -19,8 +19,8 @@ if __name__ == '__main__':
     window = webview.create_window(
         title='Steam Video Converter Pro',
         url='http://127.0.0.1:5000',
-        width=1100,
-        height=750,
+        width=1650,
+        height=1000,
         background_color='#121212'
     )
 

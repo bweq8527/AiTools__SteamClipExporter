@@ -6,133 +6,234 @@
     <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { background: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 20px; }
-        .container { max-width: 1100px; margin: 0 auto; }
-        .box { background: #1e1e1e; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        body { background: #121212; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; padding: 20px; margin: 0; height: 100vh; overflow: hidden; box-sizing: border-box; }
+        .wrapper { display: flex; gap: 20px; height: 100%; width: 100%; }
+        
+        /* 窗口容器复原 */
+        .box { background: #1e1e1e; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); display: flex; flex-direction: column; }
+        
+        /* 左侧日志区样式复原 */
+        .log-sidebar { width: 320px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; height: 100%; }
+        .log-item { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .terminal { flex: 1; background: #000; border: 1px solid #333; border-radius: 4px; font-family: 'Consolas', monospace; font-size: 10px; padding: 8px; overflow-y: auto; white-space: pre-wrap; line-height: 1.4; }
+        .log-name { font-family: 'Consolas', monospace; font-size: 11px; font-weight: bold; margin-bottom: 5px; }
+        
+        /* 蓝色时间戳：格式 [2025/12/24_11:22:31] */
+        .log-time { color: #00e5ff; font-weight: bold; margin-right: 8px; }
+        
+        .front-color { color: #ff9100; }
+        .ffmpeg-color { color: #00ff41; }
+        .py-color { color: #ff3d00; }
+
+        /* 右侧核心布局复原 */
+        .main-content { flex-grow: 1; display: flex; flex-direction: column; gap: 20px; min-width: 0; height: 100%; }
+        .path-box { height: 100px; flex-shrink: 0; }
         .path-group { display: flex; gap: 10px; align-items: center; }
         input { background: #2c2c2c; border: 1px solid #333; color: #fff; padding: 10px; flex-grow: 1; border-radius: 4px; outline: none; }
-        button { background: #0d47a1; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; transition: 0.3s; white-space: nowrap; }
+        button { background: #0d47a1; color: #fff; border: none; padding: 10px 20px; border-radius: 4px; cursor: pointer; transition: 0.3s; }
         button:hover { background: #1565c0; }
-        button.secondary { background: #454545; }
-        button.secondary:hover { background: #555; }
         button:disabled { background: #444; cursor: not-allowed; }
-        .grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
-        .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 15px; max-height: 500px; overflow-y: auto; padding: 10px; }
-        .item { background: #252525; border-radius: 6px; overflow: hidden; border: 2px solid transparent; cursor: pointer; transition: 0.2s; position: relative; }
+
+        .bottom-grid { 
+            display: grid; 
+            grid-template-columns: minmax(600px, 1fr) minmax(300px, 400px); 
+            gap: 20px; 
+            flex-grow: 1; 
+            min-height: 0; 
+        }
+
+        .scroll-area { flex-grow: 1; overflow-y: auto; margin-top: 15px; }
+
+        /* 素材卡片样式 */
+        .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
+        .item { background: #252525; border-radius: 6px; overflow: hidden; border: 2px solid transparent; cursor: pointer; transition: 0.2s; }
         .item:hover { background: #333; transform: translateY(-2px); }
         .item.selected { border-color: #2196f3; background: #2c3e50; }
-        .item.done { opacity: 0.6; border-color: #4caf50; }
-        .img-box { width: 100%; height: 100px; background: #000; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+        .item.done { opacity: 0.5; border-color: #4caf50; cursor: default; }
+        
+        .img-box { width: 100%; aspect-ratio: 16 / 9; background: #000; display: flex; align-items: center; justify-content: center; }
         .img-box img { width: 100%; height: 100%; object-fit: cover; }
-        .q-item { background: #252525; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 13px; border-left: 4px solid #2196f3; }
-        progress { width: 100%; height: 10px; accent-color: #2196f3; }
+        
+        .q-item { background: #252525; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 12px; border-left: 4px solid #2196f3; }
+        progress { width: 100%; height: 8px; accent-color: #2196f3; }
+
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="box">
-            <h2>Steam 录像自动转换工具</h2>
-            <div class="path-group">
-                <input type="text" id="p" placeholder="请选择或输入 Steam 录制库路径...">
-                <button class="secondary" onclick="browse()">选择目录</button>
-                <button onclick="setP()">开始扫描</button>
+    <div class="wrapper">
+        <div class="log-sidebar">
+            <div class="log-item">
+                <div class="log-name front-color">[FRONTEND_LOG]</div>
+                <div id="l-front" class="terminal"></div>
             </div>
-            <p id="msg" style="color:#4caf50; margin-top: 10px; font-size: 14px;"></p>
+            <div class="log-item">
+                <div class="log-name ffmpeg-color">[FFMPEG_LOG]</div>
+                <div id="l-ffmpeg" class="terminal"></div>
+            </div>
+            <div class="log-item">
+                <div class="log-name py-color">[PYTHON_LOG]</div>
+                <div id="l-py" class="terminal"></div>
+            </div>
         </div>
-        <div class="grid">
-            <div class="box">
-                <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom:10px;">
-                    <span style="font-weight: bold;">待处理素材</span>
-                    <button id="qBtn" onclick="addQ()" disabled>加入转换队列</button>
+
+        <div class="main-content">
+            <div class="box path-box">
+                <div class="path-group">
+                    <input type="text" id="p" placeholder="请选择或输入 Steam 录制库路径...">
+                    <button style="background:#454545" onclick="browse()">选择目录</button>
+                    <button onclick="setP()">开始扫描</button>
                 </div>
-                <div id="list" class="list"></div>
+                <p id="msg" style="color:#4caf50; margin-top: 10px; font-size: 13px;"></p>
             </div>
-            <div class="box">
-                <span style="font-weight: bold;">转换实时状态</span>
-                <canvas id="chart" style="margin:10px 0; max-height: 150px;"></canvas>
-                <div id="qList"></div>
+            
+            <div class="bottom-grid">
+                <div class="box">
+                    <div style="display:flex; justify-content: space-between; align-items: center;">
+                        <span style="font-weight: bold;">待处理素材库</span>
+                        <button id="qBtn" onclick="addQ()" disabled>批量转换所选</button>
+                    </div>
+                    <div class="scroll-area">
+                        <div id="list" class="list"></div>
+                    </div>
+                </div>
+                
+                <div class="box">
+                    <span style="font-weight: bold;">任务实时监控</span>
+                    <div style="height: 150px; margin-top: 15px; flex-shrink:0;">
+                        <canvas id="chart"></canvas>
+                    </div>
+                    <div class="scroll-area" id="qList"></div>
+                </div>
             </div>
         </div>
     </div>
+
     <script>
-        let sel = [], chart = null;
+        let sel = [], chart = null, pyIdx = 0;
+
+        // 生成指定格式时间戳: [2025/12/24_11:22:31]
+        function getFormattedTime() {
+            const now = new Date();
+            const y = now.getFullYear();
+            const m = String(now.getMonth() + 1).padStart(2, '0');
+            const d = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const mm = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            return `[${y}/${m}/${d}_${hh}:${mm}:${ss}]`;
+        }
+
+        function log(id, tag, msg, cls) {
+            const b = document.getElementById(id);
+            const d = document.createElement('div');
+            d.innerHTML = `<span class="log-time">${getFormattedTime()}</span><span class="${cls}">${tag}</span> ${msg}`;
+            b.appendChild(d);
+            b.scrollTop = b.scrollHeight;
+            if(b.childNodes.length > 100) b.removeChild(b.firstChild);
+        }
+
         function initChart() {
             chart = new Chart(document.getElementById('chart'), {
                 type: 'bar', 
-                data: { labels: [], datasets: [{ label: '进度%', data: [], backgroundColor: '#2196f3' }] },
-                options: { indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { max:100, min:0, grid: { color: '#333' } }, y: { grid: { display: false } } } }
-            });
-        }
-        async function browse() {
-            try {
-                const res = await axios.get('/api/select_folder');
-                if(res.data.success && res.data.path) {
-                    document.getElementById('p').value = res.data.path;
-                    setP();
+                data: { labels: [], datasets: [{ data: [], backgroundColor: '#2196f3', borderRadius: 4 }] },
+                options: { 
+                    indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false } }, 
+                    scales: { x: { max:100, min:0, grid: { color: '#333' } }, y: { grid: { display: false }, ticks: { color: '#888', font: { size: 10 } } } } 
                 }
-            } catch(e) { console.error("Dialog error", e); }
+            });
+            log('l-front', 'UI_INIT', '控制台界面渲染成功', 'front-color');
         }
+
+        async function browse() {
+            log('l-front', 'EVENT', '唤起文件浏览器', 'front-color');
+            const res = await axios.get('/api/select_folder');
+            if(res.data.success && res.data.path) {
+                document.getElementById('p').value = res.data.path;
+                log('l-front', 'PATH', `目录更新: ${res.data.path}`, 'front-color');
+                setP();
+            }
+        }
+
         async function setP() {
             const pVal = document.getElementById('p').value;
-            if(!pVal) return;
+            log('l-front', 'API', `正在同步后端路径配置...`, 'front-color');
             try {
                 const res = await axios.post('/api/set_path', { path: pVal });
                 document.getElementById('msg').innerText = res.data.message;
-                document.getElementById('msg').style.color = "#4caf50";
                 load();
-                if(!window.timer) window.timer = setInterval(tick, 1000);
-            } catch(e) {
-                document.getElementById('msg').innerText = "路径无效或目录不存在";
-                document.getElementById('msg').style.color = "#ff5252";
-            }
+                if(!window.timer) {
+                    window.timer = setInterval(tick, 1000);
+                    log('l-front', 'CORE', '后端轮询线程已挂载', 'front-color');
+                }
+            } catch(e) { log('l-front', 'ERROR', '路径验证不通过', 'front-color'); }
         }
+
         async function load() {
             const res = await axios.get('/api/clips');
-            const div = document.getElementById('list'); div.innerHTML = '';
+            const div = document.getElementById('list'); 
+            div.innerHTML = '';
+            log('l-front', 'FETCH', `已扫描到 ${res.data.clips.length} 个视频片段`, 'front-color');
+            
             res.data.clips.forEach(c => {
                 const el = document.createElement('div');
                 el.className = `item ${c.is_converted?'done':''} ${sel.includes(c.id)?'selected':''}`;
-                el.innerHTML = `
-                    <div class="img-box">${c.thumb?`<img src="${c.thumb}?t=${Date.now()}">`:'无预览'}</div>
-                    <div style="padding:8px;font-size:11px; text-align:center;">${c.id.replace('clip_', '')}</div>
-                `;
+                el.innerHTML = `<div class="img-box">${c.thumb?`<img src="${c.thumb}">`:'无预览'}</div><div style="padding:8px;font-size:10px;text-align:center;">${c.id}</div>`;
+                
+                el.onmouseenter = () => { if(!c.is_converted) log('l-front', 'HOVER', `聚焦目标: ${c.id}`, 'front-color'); };
+                
                 if(!c.is_converted) el.onclick = () => {
-                    if(sel.includes(c.id)) sel = sel.filter(i=>i!==c.id); else sel.push(c.id);
+                    if(sel.includes(c.id)) {
+                        sel = sel.filter(i=>i!==c.id);
+                        log('l-front', 'ACTION', `取消勾选: ${c.id}`, 'front-color');
+                    } else {
+                        sel.push(c.id);
+                        log('l-front', 'ACTION', `确认勾选: ${c.id}`, 'front-color');
+                    }
                     document.getElementById('qBtn').disabled = sel.length===0;
                     load();
                 };
                 div.appendChild(el);
             });
         }
+
         async function addQ() {
+            log('l-front', 'QUEUE', `将 ${sel.length} 项任务提交至后台处理`, 'front-color');
             await axios.post('/api/queue', { clip_ids: sel });
             sel = []; document.getElementById('qBtn').disabled = true; load();
         }
+
         async function tick() {
             const res = await axios.get('/api/progress');
-            const stats = res.data.all_statuses;
+            const stats = res.data.all_statuses, pyl = res.data.py_logs;
+            
+            if(pyl.length > pyIdx) {
+                for(let i=pyIdx; i<pyl.length; i++) log('l-py', 'SYSTEM', pyl[i], 'py-color');
+                pyIdx = pyl.length;
+            }
+
             const qDiv = document.getElementById('qList'); qDiv.innerHTML = '';
-            let lbs = [], dat = [], hasUpdate = false;
+            let lbs = [], dat = [], activeCount = 0;
+            
             for(let id in stats) {
                 const s = stats[id];
                 if(s.status === 'running' || s.status === 'pending') {
-                    lbs.push(id.slice(-8)); dat.push(s.progress);
-                    qDiv.innerHTML += `
-                        <div class="q-item">
-                            <b>${id}</b><br>
-                            <small>${s.eta}</small>
-                            <progress value="${s.progress}" max="100"></progress>
-                        </div>`;
+                    activeCount++;
+                    if(s.status === 'running' && s.last_raw_log) log('l-ffmpeg', 'RAW', s.last_raw_log, 'ffmpeg-color');
+                    lbs.push(id.slice(-6)); dat.push(s.progress);
+                    qDiv.innerHTML += `<div class="q-item"><b>${id}</b> | ${s.eta}<progress value="${s.progress}" max="100"></progress></div>`;
                 }
                 if(s.status === 'finished') {
-                    hasUpdate = true;
-                    delete stats[id]; // 处理完从列表移除
+                    log('l-front', 'DONE', `转换任务结束: ${id}`, 'front-color');
+                    delete stats[id];
+                    load();
                 }
             }
-            chart.data.labels = lbs; chart.data.datasets[0].data = dat; chart.update('none');
-            if(hasUpdate) load();
+            if(activeCount > 0) {
+                chart.data.labels = lbs; chart.data.datasets[0].data = dat; chart.update('none'); 
+            }
         }
         document.addEventListener('DOMContentLoaded', initChart);
     </script>
