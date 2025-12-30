@@ -8,6 +8,18 @@ import webview
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
+
+# --- 1. 先初始化工具函数 ---
+def get_res_path(rel_path):
+    if hasattr(sys, '_MEIPASS'): return os.path.join(sys._MEIPASS, rel_path)
+    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), rel_path)
+
+
+# --- 2. 核心：必须先创建 app 实例，才能给路由使用 ---
+app = Flask(__name__, static_folder=get_res_path('frontend'), static_url_path='')
+CORS(app)
+
+# --- 3. 初始化全局变量 ---
 try:
     from backend.worker import convert_clip, generate_quick_thumb
 except ImportError:
@@ -16,22 +28,19 @@ except ImportError:
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-def get_res_path(rel_path):
-    if hasattr(sys, '_MEIPASS'): return os.path.join(sys._MEIPASS, rel_path)
-    return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), rel_path)
-
-app = Flask(__name__, static_folder=get_res_path('frontend'), static_url_path='')
-CORS(app)
-
 CONVERSION_QUEUE = queue.Queue()
 CONVERSION_STATUS = {}
 CURRENT_CLIP_PATH = None
+EXPORT_PATH = None
 PYTHON_LOGS = []
+
 
 def add_py_log(msg):
     PYTHON_LOGS.append(msg)
     if len(PYTHON_LOGS) > 100: PYTHON_LOGS.pop(0)
 
+
+# --- 4. 线程工作逻辑 ---
 def worker_thread():
     while True:
         item = CONVERSION_QUEUE.get()
@@ -48,11 +57,16 @@ def worker_thread():
             add_py_log(f"转换出错: {str(e)}")
         CONVERSION_QUEUE.task_done()
 
+
 threading.Thread(target=worker_thread, daemon=True).start()
+
+
+# --- 5. 定义路由 (此时 app 已经存在，不会报错) ---
 
 @app.route('/')
 def index():
     return send_from_directory(app.static_folder, 'index.html')
+
 
 @app.route('/api/select_folder', methods=['GET'])
 def select_folder():
@@ -60,9 +74,18 @@ def select_folder():
     if window:
         result = window.create_file_dialog(webview.FOLDER_DIALOG)
         if result and len(result) > 0:
-            add_py_log(f"选择目录: {result[0]}")
             return jsonify({"success": True, "path": result[0]})
     return jsonify({"success": False, "path": ""})
+
+
+@app.route('/api/open_folder', methods=['POST'])
+def open_folder():
+    path = request.json.get('path', '')
+    if os.path.exists(path):
+        os.startfile(path)
+        return jsonify({"success": True})
+    return jsonify({"success": False}), 400
+
 
 @app.route('/api/thumbnail/<cid>')
 def get_thumb(cid):
@@ -70,16 +93,21 @@ def get_thumb(cid):
         return send_from_directory(CURRENT_CLIP_PATH, f"{cid}.jpg")
     return "404", 404
 
+
 @app.route('/api/set_path', methods=['POST'])
 def set_p():
-    global CURRENT_CLIP_PATH
+    global CURRENT_CLIP_PATH, EXPORT_PATH
     p = request.json.get('path', '').strip()
+    e = request.json.get('export_path', '').strip()
+
     if os.path.isdir(p):
         c_p = os.path.join(p, 'clips')
         CURRENT_CLIP_PATH = c_p if os.path.isdir(c_p) else p
-        add_py_log(f"设置库路径: {CURRENT_CLIP_PATH}")
-        return jsonify({"success": True, "message": "目录扫描成功"})
-    return jsonify({"success": False, "message": "无效的目录路径"}), 400
+        EXPORT_PATH = e if (e and os.path.isdir(e)) else CURRENT_CLIP_PATH
+        add_py_log(f"配置就绪 | 素材: {CURRENT_CLIP_PATH} | 导出: {EXPORT_PATH}")
+        return jsonify({"success": True, "message": "目录配置成功"})
+    return jsonify({"success": False, "message": "无效的素材路径"}), 400
+
 
 @app.route('/api/clips', methods=['GET'])
 def list_c():
@@ -93,11 +121,17 @@ def list_c():
             cid = os.path.basename(entry)
             video_data_dir = os.path.join(entry, 'video')
             if not os.path.exists(video_data_dir): continue
+
             t_path = os.path.join(CURRENT_CLIP_PATH, f"{cid}.jpg")
             if not os.path.exists(t_path):
-                try: generate_quick_thumb(entry, t_path)
-                except: pass
-            is_done = os.path.exists(os.path.join(CURRENT_CLIP_PATH, f"{cid}.mp4"))
+                try:
+                    generate_quick_thumb(entry, t_path)
+                except:
+                    pass
+
+            check_target = os.path.join(EXPORT_PATH, f"{cid}.mp4")
+            is_done = os.path.exists(check_target)
+
             clips.append({
                 "id": cid, "is_converted": is_done,
                 "thumb": f"/api/thumbnail/{cid}" if os.path.exists(t_path) else None,
@@ -107,6 +141,7 @@ def list_c():
         add_py_log(f"扫描错误: {str(e)}")
     return jsonify({"clips": clips})
 
+
 @app.route('/api/queue', methods=['POST'])
 def add_q():
     ids = request.json.get('clip_ids', [])
@@ -114,9 +149,11 @@ def add_q():
         status_info = CONVERSION_STATUS.get(cid, {})
         if status_info.get('status') not in ['pending', 'running']:
             CONVERSION_STATUS[cid] = {'status': 'pending', 'progress': 0, 'eta': '排队中'}
-            CONVERSION_QUEUE.put((os.path.join(CURRENT_CLIP_PATH, cid), os.path.join(CURRENT_CLIP_PATH, f"{cid}.mp4"), cid))
+            target_dir = EXPORT_PATH if EXPORT_PATH else CURRENT_CLIP_PATH
+            CONVERSION_QUEUE.put((os.path.join(CURRENT_CLIP_PATH, cid), os.path.join(target_dir, f"{cid}.mp4"), cid))
             add_py_log(f"加入队列: {cid}")
     return jsonify({"success": True})
+
 
 @app.route('/api/progress')
 def get_prog():

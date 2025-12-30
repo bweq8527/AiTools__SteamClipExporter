@@ -63,7 +63,6 @@ body {
     margin-bottom: 5px; 
 }
 
-/* 蓝色时间戳：格式 [2025/12/24_11:22:31] */
 .log-time { 
     color: #00e5ff; 
     font-weight: bold; 
@@ -74,7 +73,6 @@ body {
 .ffmpeg-color { color: #00ff41; }
 .py-color { color: #ff3d00; }
 
-/* 右侧核心布局复原 */
 .main-content { 
     flex-grow: 1; 
     display: flex; 
@@ -85,14 +83,12 @@ body {
 }
 
 .path-box { 
-    height: 100px; 
     flex-shrink: 0; 
 }
 
 .path-group { 
     display: flex; 
     gap: 10px; 
-    align-items: center; 
 }
 
 input { 

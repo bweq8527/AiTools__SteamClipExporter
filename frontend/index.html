@@ -26,13 +26,18 @@
         </div>
 
         <div class="main-content">
-            <div class="box path-box">
+            <div class="box path-box" style="gap: 10px;">
                 <div class="path-group">
                     <input type="text" id="p" placeholder="请选择或输入 Steam 录制库路径...">
-                    <button style="background:#454545" onclick="browse()">选择目录</button>
+                    <button style="background:#454545" onclick="browse('p')">选择素材目录</button>
                     <button onclick="setP()">开始扫描</button>
                 </div>
-                <p id="msg" style="color:#4caf50; margin-top: 10px; font-size: 13px;"></p>
+                <div class="path-group">
+                    <input type="text" id="ep" placeholder="自定义视频导出位置 (可选)...">
+                    <button style="background:#454545" onclick="browse('ep')">选择导出目录</button>
+                    <button style="background:#2e7d32" onclick="openExportDir()">打开导出文件夹</button>
+                </div>
+                <p id="msg" style="color:#4caf50; margin-top: 5px; font-size: 13px;"></p>
             </div>
             
             <div class="bottom-grid">
