@@ -24,108 +24,114 @@ body {
     box-shadow: 0 4px 6px rgba(0,0,0,0.3); 
     display: flex; 
     flex-direction: column; 
+    /* 确保盒子不会溢出父容器 */
+    min-height: 0;
 }
 
 /* 左侧日志区样式复原 */
-.log-sidebar { 
-    width: 320px; 
-    display: flex; 
-    flex-direction: column; 
-    gap: 10px; 
-    flex-shrink: 0; 
-    height: 100%; 
+.log-sidebar {
+    width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex-shrink: 0;
+    height: 100%;
 }
 
-.log-item { 
-    flex: 1; 
-    display: flex; 
-    flex-direction: column; 
-    overflow: hidden; 
+.log-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
-.terminal { 
-    flex: 1; 
-    background: #000; 
-    border: 1px solid #333; 
-    border-radius: 4px; 
-    font-family: 'Consolas', monospace; 
-    font-size: 10px; 
-    padding: 8px; 
-    overflow-y: auto; 
-    white-space: pre-wrap; 
-    line-height: 1.4; 
+.terminal {
+    flex: 1;
+    background: #000;
+    border: 1px solid #333;
+    border-radius: 4px;
+    font-family: 'Consolas', monospace;
+    font-size: 10px;
+    padding: 8px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    line-height: 1.4;
 }
 
-.log-name { 
-    font-family: 'Consolas', monospace; 
-    font-size: 11px; 
-    font-weight: bold; 
-    margin-bottom: 5px; 
+.log-name {
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    font-weight: bold;
+    margin-bottom: 5px;
 }
 
-.log-time { 
-    color: #00e5ff; 
-    font-weight: bold; 
-    margin-right: 8px; 
+.log-time {
+    color: #00e5ff;
+    font-weight: bold;
+    margin-right: 8px;
 }
 
 .front-color { color: #ff9100; }
 .ffmpeg-color { color: #00ff41; }
 .py-color { color: #ff3d00; }
 
-.main-content { 
-    flex-grow: 1; 
-    display: flex; 
-    flex-direction: column; 
-    gap: 20px; 
-    min-width: 0; 
-    height: 100%; 
+.main-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    min-width: 0;
+    height: 100%;
+    /* 限制主内容区域不超出视口 */
+    overflow: hidden;
 }
 
-.path-box { 
-    flex-shrink: 0; 
+.path-box {
+    flex-shrink: 0;
 }
 
-.path-group { 
-    display: flex; 
-    gap: 10px; 
+.path-group {
+    display: flex;
+    gap: 10px;
 }
 
-input { 
-    background: #2c2c2c; 
-    border: 1px solid #333; 
-    color: #fff; 
-    padding: 10px; 
-    flex-grow: 1; 
-    border-radius: 4px; 
-    outline: none; 
+input {
+    background: #2c2c2c;
+    border: 1px solid #333;
+    color: #fff;
+    padding: 10px;
+    flex-grow: 1;
+    border-radius: 4px;
+    outline: none;
 }
 
-button { 
-    background: #0d47a1; 
-    color: #fff; 
-    border: none; 
-    padding: 10px 20px; 
-    border-radius: 4px; 
-    cursor: pointer; 
-    transition: 0.3s; 
+button {
+    background: #0d47a1;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: 0.3s;
 }
 
 button:hover { background: #1565c0; }
 button:disabled { background: #444; cursor: not-allowed; }
 
-.bottom-grid { 
-    display: grid; 
-    grid-template-columns: minmax(600px, 1fr) minmax(300px, 400px); 
-    gap: 20px; 
-    flex-grow: 1; 
-    min-height: 0; 
+.bottom-grid {
+    display: grid;
+    grid-template-columns: minmax(600px, 1fr) minmax(300px, 400px);
+    gap: 20px;
+    flex-grow: 1;
+    min-height: 0; /* 关键：允许网格在 flex 容器中收缩 */
 }
 
-.scroll-area { 
-    flex-grow: 1; 
-    overflow-y: auto; 
-    margin-top: 15px; 
+.scroll-area {
+    flex-grow: 1;
+    overflow-y: auto;
+    margin-top: 15px;
+    /* 解决部分浏览器下滚动失效 */
+    min-height: 0;
 }
 
 /* 素材卡片样式 */
