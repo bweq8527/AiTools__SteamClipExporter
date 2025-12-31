@@ -5,6 +5,8 @@ import threading
 import queue
 import glob
 import webview
+import re
+from datetime import datetime
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
@@ -113,17 +115,31 @@ def list_c():
             if not os.path.isdir(entry): continue
             cid = os.path.basename(entry)
 
-            game_name = "未知游戏"
+            # --- 优化：从文件名解析 SteamID 和时间 ---
+            # 格式: clip_2357570_20241112_145705
+            name_parts = cid.split('_')
+            steam_id = "Unknown"
+            m_time = os.path.getmtime(entry)  # 兜底时间
+
+            if len(name_parts) >= 4:
+                steam_id = name_parts[1]
+                date_str = name_parts[2]
+                time_str = name_parts[3]
+                try:
+                    dt = datetime.strptime(f"{date_str}{time_str}", "%Y%m%d%H%M%S")
+                    m_time = dt.timestamp()
+                except:
+                    pass
+
+            game_name = f"AppID {steam_id}"  # 默认显示 ID
             g_path = os.path.join(entry, 'gamename.txt')
             if os.path.exists(g_path):
                 try:
                     with open(g_path, 'r', encoding='utf-8') as f:
-                        game_name = f.read().strip()
+                        name_from_file = f.read().strip()
+                        if name_from_file: game_name = name_from_file
                 except:
                     pass
-
-            # 获取时间戳（秒）用于前端排序和分组
-            m_time = os.path.getmtime(entry)
 
             t_path = os.path.join(CURRENT_CLIP_PATH, f"{cid}.jpg")
             if not os.path.exists(t_path):
