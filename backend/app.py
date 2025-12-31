@@ -9,17 +9,14 @@ from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 
 
-# --- 1. 先初始化工具函数 ---
 def get_res_path(rel_path):
     if hasattr(sys, '_MEIPASS'): return os.path.join(sys._MEIPASS, rel_path)
     return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), rel_path)
 
 
-# --- 2. 核心：必须先创建 app 实例，才能给路由使用 ---
 app = Flask(__name__, static_folder=get_res_path('frontend'), static_url_path='')
 CORS(app)
 
-# --- 3. 初始化全局变量 ---
 try:
     from backend.worker import convert_clip, generate_quick_thumb
 except ImportError:
@@ -40,7 +37,6 @@ def add_py_log(msg):
     if len(PYTHON_LOGS) > 100: PYTHON_LOGS.pop(0)
 
 
-# --- 4. 线程工作逻辑 ---
 def worker_thread():
     while True:
         item = CONVERSION_QUEUE.get()
@@ -60,8 +56,6 @@ def worker_thread():
 
 threading.Thread(target=worker_thread, daemon=True).start()
 
-
-# --- 5. 定义路由 (此时 app 已经存在，不会报错) ---
 
 @app.route('/')
 def index():
@@ -99,7 +93,6 @@ def set_p():
     global CURRENT_CLIP_PATH, EXPORT_PATH
     p = request.json.get('path', '').strip()
     e = request.json.get('export_path', '').strip()
-
     if os.path.isdir(p):
         c_p = os.path.join(p, 'clips')
         CURRENT_CLIP_PATH = c_p if os.path.isdir(c_p) else p
@@ -119,8 +112,18 @@ def list_c():
         for entry in all_entries:
             if not os.path.isdir(entry): continue
             cid = os.path.basename(entry)
-            video_data_dir = os.path.join(entry, 'video')
-            if not os.path.exists(video_data_dir): continue
+
+            game_name = "未知游戏"
+            g_path = os.path.join(entry, 'gamename.txt')
+            if os.path.exists(g_path):
+                try:
+                    with open(g_path, 'r', encoding='utf-8') as f:
+                        game_name = f.read().strip()
+                except:
+                    pass
+
+            # 获取时间戳（秒）用于前端排序和分组
+            m_time = os.path.getmtime(entry)
 
             t_path = os.path.join(CURRENT_CLIP_PATH, f"{cid}.jpg")
             if not os.path.exists(t_path):
@@ -133,7 +136,10 @@ def list_c():
             is_done = os.path.exists(check_target)
 
             clips.append({
-                "id": cid, "is_converted": is_done,
+                "id": cid,
+                "game": game_name,
+                "time": m_time,
+                "is_converted": is_done,
                 "thumb": f"/api/thumbnail/{cid}" if os.path.exists(t_path) else None,
                 "status": CONVERSION_STATUS.get(cid, {}).get('status', 'idle')
             })

@@ -43,7 +43,11 @@
             <div class="bottom-grid">
                 <div class="box">
                     <div style="display:flex; justify-content: space-between; align-items: center;">
-                        <span style="font-weight: bold;">待处理素材库</span>
+                        <div style="display:flex; align-items: center; gap: 10px;">
+                            <span id="lib-title" style="font-weight: bold;">待处理素材库</span>
+                            <button id="viewBtn" style="background:#555; padding: 4px 10px; font-size: 11px;" onclick="toggleView()">视图: 全部平铺</button>
+                            <button id="allBtn" style="background:#006064; padding: 4px 10px; font-size: 11px;" onclick="selectAll()">全选未导出</button>
+                        </div>
                         <button id="qBtn" onclick="addQ()" disabled>批量转换所选</button>
                     </div>
                     <div class="scroll-area">
