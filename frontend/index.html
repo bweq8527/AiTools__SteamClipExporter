@@ -20,7 +20,7 @@
                 <div id="l-ffmpeg" class="terminal"></div>
             </div>
             <div class="log-item">
-                <div class="log-name py-color">[PYTHON_LOG]</div>
+                <div class="log-name py-color">[BCAKEND_LOG]</div>
                 <div id="l-py" class="terminal"></div>
             </div>
         </div>
@@ -28,14 +28,14 @@
         <div class="main-content">
             <div class="box path-box" style="gap: 10px;">
                 <div class="path-group">
-                    <input type="text" id="p" placeholder="请选择或输入 Steam 录制库路径...">
+                    <input type="text" id="p" placeholder="请选择或输入素材库路径...">
                     <button style="background:#454545" onclick="browse('p')">选择素材目录</button>
-                    <button onclick="setP()">开始扫描</button>
+                    <button onclick="setP()">扫描素材库文件夹</button>
                 </div>
                 <div class="path-group">
-                    <input type="text" id="ep" placeholder="自定义视频导出位置 (可选)...">
+                    <input type="text" id="ep" placeholder="请选择或输入导出库路径（默认导出至素材库）...">
                     <button style="background:#454545" onclick="browse('ep')">选择导出目录</button>
-                    <button style="background:#2e7d32" onclick="openExportDir()">打开导出文件夹</button>
+                    <button style="background:#2e7d32" onclick="openExportDir()">打开导出库文件夹</button>
                 </div>
                 <p id="msg" style="color:#4caf50; margin-top: 5px; font-size: 13px;"></p>
             </div>
@@ -48,7 +48,7 @@
                             <button id="viewBtn" style="background:#555; padding: 4px 10px; font-size: 11px;" onclick="toggleView()">视图: 全部平铺</button>
                             <button id="allBtn" style="background:#006064; padding: 4px 10px; font-size: 11px;" onclick="selectAll()">全选未导出</button>
                         </div>
-                        <button id="qBtn" onclick="addQ()" disabled>批量转换所选</button>
+                        <button id="qBtn" onclick="addQ()" disabled>批量转换所选素材</button>
                     </div>
                     <div class="scroll-area">
                         <div id="list" class="list"></div>
@@ -56,7 +56,7 @@
                 </div>
                 
                 <div class="box">
-                    <span style="font-weight: bold;">任务实时监控</span>
+                    <span style="font-weight: bold;">转换任务进度</span>
                     <div style="height: 150px; margin-top: 15px; flex-shrink:0;">
                         <canvas id="chart"></canvas>
                     </div>

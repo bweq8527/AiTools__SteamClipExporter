@@ -82,7 +82,7 @@ function toggleView() {
     viewMode = (viewMode === 'flat') ? 'album' : 'flat';
     currentAlbum = null;
     log('l-front', 'UI', `切换视图至: ${viewMode==='flat'?'平铺':'分类'}`, 'front-color');
-    document.getElementById('viewBtn').innerText = (viewMode === 'flat') ? "视图: 全部平铺" : "视图: 游戏分类";
+    document.getElementById('viewBtn').innerText = (viewMode === 'flat') ? "视图: 全部平铺" : "视图: 按游戏分类";
     renderList();
 }
 
@@ -107,7 +107,7 @@ async function load(verbose = false) {
         const oldLen = allClips.length;
         allClips = res.data.clips;
         if (verbose || oldLen !== allClips.length) {
-            if(verbose) log('l-front', 'INFO', `扫描到 ${allClips.length} 个有效录像节点`, 'front-color');
+            if(verbose) log('l-front', 'INFO', `扫描到 ${allClips.length} 个有效录像`, 'front-color');
             renderList();
         }
     } catch (e) {}
