@@ -11,7 +11,6 @@ body {
 
 .wrapper { display: flex; gap: 20px; height: 100%; width: 100%; }
 
-/* 还原：窗口容器样式 */
 .box {
     background: #1e1e1e;
     padding: 20px;
@@ -22,7 +21,6 @@ body {
     min-height: 0;
 }
 
-/* 还原：左侧日志区完整样式 */
 .log-sidebar {
     width: 320px;
     display: flex;
@@ -58,7 +56,6 @@ body {
 .ffmpeg-color { color: #00ff41; }
 .py-color { color: #ff3d00; }
 
-/* 主体内容区 */
 .main-content { flex-grow: 1; display: flex; flex-direction: column; gap: 20px; min-width: 0; height: 100%; }
 .path-box { flex-shrink: 0; }
 .path-group { display: flex; gap: 10px; margin-bottom: 5px; }
@@ -79,16 +76,23 @@ button:disabled { background: #444; cursor: not-allowed; }
 .scroll-area { flex-grow: 1; overflow-y: auto; margin-top: 15px; padding-right: 5px; }
 .list { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 15px; }
 
-/* 列表项样式 */
 .item { background: #252525; border-radius: 6px; overflow: hidden; border: 2px solid transparent; cursor: pointer; transition: 0.1s; position: relative; }
 .item:hover { background: #333; transform: translateY(-2px); }
 .item.selected { border-color: #2196f3; background: #2c3e50; }
-.item.done { opacity: 0.4; border-color: #4caf50; cursor: default; pointer-events: none; }
+.item.done { opacity: 0.4; border-color: #4caf50; cursor: default; }
 
-.img-box { width: 100%; aspect-ratio: 16 / 9; background: #000; display: flex; align-items: center; justify-content: center; }
+.img-box { width: 100%; aspect-ratio: 16 / 9; background: #000; display: flex; align-items: center; justify-content: center; position: relative; }
 .img-box img { width: 100%; height: 100%; object-fit: cover; }
 
-/* 专辑视图样式 */
+/* 预览与提示样式 */
+.hover-preview { position: absolute; top:0; left:0; width:100%; height:100%; opacity:0; transition: 0.3s; pointer-events: none; background: #000; }
+.hover-preview video { width: 100%; height: 100%; object-fit: cover; }
+.play-hint { position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.6); padding: 2px 5px; font-size: 9px; border-radius: 3px; opacity: 0; transition: 0.2s; }
+.item:hover .play-hint { opacity: 1; }
+
+.item-footer { padding: 8px; font-size: 10px; text-align: center; border-top: 1px solid #333; position: relative; }
+.item-footer:hover { background: #444; }
+
 .album-stack { position: relative; box-shadow: 4px 4px 0 #111, 8px 8px 0 #333; margin-right: 8px; margin-bottom: 8px; }
 .album-info { padding: 10px; background: #2a2a2a; }
 .album-name-text { font-weight:bold; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size: 13px; }
@@ -96,8 +100,21 @@ button:disabled { background: #444; cursor: not-allowed; }
 .date-divider { grid-column: 1 / -1; border-bottom: 1px solid #444; padding: 10px 0 5px 0; margin-top: 10px; font-size: 12px; color: #aaa; display: flex; align-items: center; }
 .date-divider span { background: #1e1e1e; padding-right: 15px; font-weight: bold; }
 
-/* 任务栏样式 */
 .q-item { background: #252525; padding: 10px; border-radius: 4px; margin-bottom: 10px; font-size: 12px; border-left: 4px solid #2196f3; }
 progress { width: 100%; height: 8px; accent-color: #2196f3; }
+
+/* 播放器 Overlays */
+.overlay {
+    position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85);
+    display: none; justify-content: center; align-items: center; z-index: 9999;
+}
+.overlay.active { display: flex; }
+.player-container {
+    width: 80%; max-width: 1000px; background: #000; border-radius: 8px; overflow: hidden;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+.player-container video { width: 100%; display: block; aspect-ratio: 16/9; }
+.player-info { padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #1e1e1e; }
+
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }

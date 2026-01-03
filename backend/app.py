@@ -6,8 +6,10 @@ import queue
 import glob
 import webview
 import re
+import subprocess
+import tempfile
 from datetime import datetime
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, Response
 from flask_cors import CORS
 
 
@@ -20,9 +22,9 @@ app = Flask(__name__, static_folder=get_res_path('frontend'), static_url_path=''
 CORS(app)
 
 try:
-    from backend.worker import convert_clip, generate_quick_thumb
+    from backend.worker import convert_clip, generate_quick_thumb, get_ffmpeg_tool, get_hide_config
 except ImportError:
-    from worker import convert_clip, generate_quick_thumb
+    from worker import convert_clip, generate_quick_thumb, get_ffmpeg_tool, get_hide_config
 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
@@ -90,6 +92,50 @@ def get_thumb(cid):
     return "404", 404
 
 
+# --- 修正后的流媒体预览接口 ---
+@app.route('/api/stream/<cid>')
+def stream_clip(cid):
+    if not CURRENT_CLIP_PATH: return "Path not set", 400
+    folder = os.path.join(CURRENT_CLIP_PATH, cid)
+    # 查找视频文件夹
+    v_dirs = glob.glob(os.path.join(folder, 'video', 'fg_*'))
+    if not v_dirs: return "Clip not found", 404
+
+    target_v_dir = v_dirs[0]
+    init_file = os.path.join(target_v_dir, 'init-stream0.m4s')
+    chunks = sorted(glob.glob(os.path.join(target_v_dir, 'chunk-stream0-*.m4s')))
+
+    def generate():
+        ffmpeg = get_ffmpeg_tool('ffmpeg.exe')
+
+        # 创建临时合并文件：M4S 是分段 MP4，直接二进制合并 init + chunks 即可被 ffmpeg 识别
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
+            with open(init_file, 'rb') as f: tmp.write(f.read())
+            for chk in chunks[:10]:  # 预览仅取前10个分段以提速
+                with open(chk, 'rb') as f: tmp.write(f.read())
+            tmp_path = tmp.name
+
+        # 使用 ffmpeg 转换为浏览器友好的 mp4 流 (faststart)
+        cmd = [
+            ffmpeg, '-i', tmp_path,
+            '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
+            '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+            'pipe:1'
+        ]
+
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, startupinfo=get_hide_config())
+        try:
+            while True:
+                data = proc.stdout.read(1024 * 128)
+                if not data: break
+                yield data
+        finally:
+            proc.terminate()
+            if os.path.exists(tmp_path): os.remove(tmp_path)
+
+    return Response(generate(), mimetype='video/mp4')
+
+
 @app.route('/api/set_path', methods=['POST'])
 def set_p():
     global CURRENT_CLIP_PATH, EXPORT_PATH
@@ -114,13 +160,9 @@ def list_c():
         for entry in all_entries:
             if not os.path.isdir(entry): continue
             cid = os.path.basename(entry)
-
-            # --- 优化：从文件名解析 SteamID 和时间 ---
-            # 格式: clip_2357570_20241112_145705
             name_parts = cid.split('_')
             steam_id = "Unknown"
-            m_time = os.path.getmtime(entry)  # 兜底时间
-
+            m_time = os.path.getmtime(entry)
             if len(name_parts) >= 4:
                 steam_id = name_parts[1]
                 date_str = name_parts[2]
@@ -130,8 +172,7 @@ def list_c():
                     m_time = dt.timestamp()
                 except:
                     pass
-
-            game_name = f"AppID {steam_id}"  # 默认显示 ID
+            game_name = f"AppID {steam_id}"
             g_path = os.path.join(entry, 'gamename.txt')
             if os.path.exists(g_path):
                 try:
@@ -140,23 +181,17 @@ def list_c():
                         if name_from_file: game_name = name_from_file
                 except:
                     pass
-
             t_path = os.path.join(CURRENT_CLIP_PATH, f"{cid}.jpg")
             if not os.path.exists(t_path):
                 try:
                     generate_quick_thumb(entry, t_path)
                 except:
                     pass
-
             check_target = os.path.join(EXPORT_PATH, f"{cid}.mp4")
             is_done = os.path.exists(check_target)
-
             clips.append({
-                "id": cid,
-                "game": game_name,
-                "time": m_time,
-                "is_converted": is_done,
-                "thumb": f"/api/thumbnail/{cid}" if os.path.exists(t_path) else None,
+                "id": cid, "game": game_name, "time": m_time,
+                "is_converted": is_done, "thumb": f"/api/thumbnail/{cid}" if os.path.exists(t_path) else None,
                 "status": CONVERSION_STATUS.get(cid, {}).get('status', 'idle')
             })
     except Exception as e:

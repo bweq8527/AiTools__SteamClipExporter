@@ -18,7 +18,6 @@ function log(id, tag, msg, cls) {
     const b = document.getElementById(id);
     if(!b) return;
     const d = document.createElement('div');
-    // 恢复原有结构：时间戳 + 颜色标签 + 消息内容
     d.innerHTML = `<span class="log-time">${getFormattedTime()}</span><span class="${cls}">${tag}</span> ${msg}`;
     b.appendChild(d);
     b.scrollTop = b.scrollHeight;
@@ -41,6 +40,33 @@ function initChart() {
         }
     });
     log('l-front', 'CORE', '控制台引擎加载完毕', 'front-color');
+}
+
+// --- 新增：播放器逻辑 ---
+function openPlayer(cid) {
+    const overlay = document.getElementById('video-overlay');
+    const video = document.getElementById('main-player');
+    const title = document.getElementById('player-title');
+
+    title.innerText = `正在播放预览: ${cid}`;
+    // 添加时间戳防止浏览器缓存导致的无法刷新
+    video.src = `/api/stream/${cid}?t=${new Date().getTime()}`;
+    overlay.classList.add('active');
+
+    video.load();
+    video.play().catch(e => {
+        log('l-front', 'ERROR', '播放失败，可能是解码器未就绪', 'front-color');
+    });
+    log('l-front', 'PLAYER', `请求视频流: ${cid}`, 'front-color');
+}
+
+function closePlayer() {
+    const overlay = document.getElementById('video-overlay');
+    const video = document.getElementById('main-player');
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    overlay.classList.remove('active');
 }
 
 async function browse(targetId) {
@@ -152,20 +178,56 @@ function renderList() {
 function createClipEl(c) {
     const el = document.createElement('div');
     el.className = `item ${c.is_converted?'done':''} ${sel.includes(c.id)?'selected':''}`;
-    el.innerHTML = `<div class="img-box">${c.thumb?`<img src="${c.thumb}">`:'无预览'}</div><div style="padding:8px;font-size:10px;text-align:center;">${c.id}</div>`;
-    if(!c.is_converted) {
-        el.onclick = (e) => {
-            e.stopPropagation();
-            if(sel.includes(c.id)) sel = sel.filter(i=>i!==c.id);
-            else sel.push(c.id);
-            document.getElementById('qBtn').disabled = sel.length===0;
-            log('l-front', 'UI', `当前已选择 ${sel.length} 项`, 'front-color');
-            renderList();
-        };
-    }
+
+    el.innerHTML = `
+        <div class="img-box">
+            ${c.thumb?`<img src="${c.thumb}">`:'无预览'}
+            <div class="hover-preview"></div>
+            <div class="play-hint">点击播放</div>
+        </div>
+        <div class="item-footer">
+            <div class="cid-text">${c.id}</div>
+        </div>
+    `;
+
+    const imgBox = el.querySelector('.img-box');
+    const hoverBox = el.querySelector('.hover-preview');
+
+    let previewTimer;
+    imgBox.onmouseenter = () => {
+        previewTimer = setTimeout(() => {
+            const v = document.createElement('video');
+            v.src = `/api/stream/${c.id}?type=preview`;
+            v.muted = true;
+            v.autoplay = true;
+            v.loop = true;
+            v.setAttribute('playsinline', '');
+            hoverBox.appendChild(v);
+            hoverBox.style.opacity = "1";
+        }, 800);
+    };
+    imgBox.onmouseleave = () => {
+        clearTimeout(previewTimer);
+        hoverBox.innerHTML = "";
+        hoverBox.style.opacity = "0";
+    };
+
+    imgBox.onclick = (e) => {
+        e.stopPropagation();
+        openPlayer(c.id);
+    };
+
+    el.querySelector('.item-footer').onclick = (e) => {
+        e.stopPropagation();
+        if(c.is_converted) return;
+        if(sel.includes(c.id)) sel = sel.filter(i=>i!==c.id);
+        else sel.push(c.id);
+        document.getElementById('qBtn').disabled = sel.length===0;
+        renderList();
+    };
+
     return el;
 }
-
 async function addQ() {
     log('l-front', 'QUEUE', `将 ${sel.length} 项任务提交至转换引擎`, 'front-color');
     try {
@@ -180,41 +242,32 @@ async function tick() {
     try {
         const res = await axios.get('/api/progress');
         const stats = res.data.all_statuses, pyl = res.data.py_logs;
-
-        // Python 日志处理（后端传来的日志已带时间戳）
         if(pyl.length > pyIdx) {
             for(let i=pyIdx; i<pyl.length; i++) {
                 const msg = pyl[i];
-                // 如果后端带了时间戳，这里剥离一下，避免前端重复显示
                 const cleanMsg = msg.includes(']') ? msg.split(']').slice(1).join(']').trim() : msg;
                 log('l-py', 'SYSTEM', cleanMsg, 'py-color');
             }
             pyIdx = pyl.length;
         }
-
         const qDiv = document.getElementById('qList');
         let lbs = [], dat = [], activeCount = 0;
-
         for(let id in stats) {
             const s = stats[id];
             activeCount++;
-
             if(s.status === 'running' && s.last_raw_log) {
                 if (window[`lastLog_${id}`] !== s.last_raw_log) {
                     log('l-ffmpeg', 'EXEC', `${id.slice(-6)}: ${s.last_raw_log}`, 'ffmpeg-color');
                     window[`lastLog_${id}`] = s.last_raw_log;
                 }
             }
-
             if(s.status === 'finished' && !s.logged) {
                 log('l-front', 'DONE', `文件 [${id}] 转换成功并已保存`, 'front-color');
                 s.logged = true;
                 load();
             }
-
             lbs.push(id.slice(-6));
             dat.push(s.progress);
-
             let existingItem = document.getElementById(`q-${id}`);
             if (!existingItem) {
                 existingItem = document.createElement('div');
@@ -224,7 +277,6 @@ async function tick() {
             }
             existingItem.innerHTML = `<b>${id}</b> | <span class="eta-text">${s.eta}</span><progress value="${s.progress}" max="100"></progress>`;
         }
-
         if(activeCount > 0 && chart) {
             chart.data.labels = lbs;
             chart.data.datasets[0].data = dat;

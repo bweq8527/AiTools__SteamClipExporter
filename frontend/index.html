@@ -9,6 +9,16 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <div id="video-overlay" class="overlay" onclick="closePlayer()">
+        <div class="player-container" onclick="event.stopPropagation()">
+            <video id="main-player" controls autoplay></video>
+            <div class="player-info">
+                <span id="player-title">正在播放</span>
+                <button onclick="closePlayer()">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <div class="wrapper">
         <div class="log-sidebar">
             <div class="log-item">
