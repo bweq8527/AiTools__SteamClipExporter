@@ -65,11 +65,25 @@
                     </div>
                 </div>
                 
-                <div class="box">
+                <div class="box task-box">
                     <span style="font-weight: bold;">转换任务进度</span>
-                    <span class="q-detail">图表为阶段加权估算，具体进度见各任务详情</span>
-                    <div style="height: 150px; margin-top: 15px; flex-shrink:0;">
-                        <canvas id="chart"></canvas>
+                    <div id="monitor-panel" class="task-monitor">
+                        <div class="monitor-header">
+                            <div class="monitor-caption"><span class="monitor-dot"></span><span id="monitor-state">等待导出任务</span></div>
+                            <button id="monitor-follow" type="button" title="自动显示正在执行的任务">跟随当前</button>
+                        </div>
+                        <div id="monitor-task" class="monitor-task">等待导出任务</div>
+                        <div class="monitor-metrics">
+                            <div><span class="metric-label">磁盘读写</span><strong id="monitor-disk">— MB/s</strong></div>
+                            <div><span class="metric-label">封装速度</span><strong id="monitor-speed">— MB/s</strong></div>
+                            <div><span class="metric-label">总用时</span><strong id="monitor-time">00:00</strong></div>
+                        </div>
+                        <div class="monitor-canvas">
+                            <canvas id="chart"></canvas>
+                            <div id="monitor-empty" class="monitor-empty">该阶段暂无采样数据</div>
+                        </div>
+                        <div id="monitor-phases" class="monitor-phases"></div>
+                        <div class="monitor-note">柱形：读写 MB/s · 折线：拼接 MB/s／封装 x<br>当前任务的程序 I/O，可能包含系统缓存；点击任务条切换</div>
                     </div>
                     <div class="scroll-area" id="qList"></div>
                 </div>

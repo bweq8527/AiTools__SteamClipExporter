@@ -133,7 +133,7 @@ test('polling renders independent track counts, current stage and media progress
     } } });
     await ui.context.tick();
     const card = ui.document.getElementById('q-clip_test');
-    assert.match(card.textContent, /FFmpeg 封装/);
+    assert.match(card.textContent, /封装媒体文件/);
     assert.match(card.textContent, /视频分段：12 \/ 12/);
     assert.match(card.textContent, /音频分段：9 \/ 9/);
     assert.match(card.textContent, /02:30 \/ 10:00/);

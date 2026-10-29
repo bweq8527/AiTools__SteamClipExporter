@@ -83,6 +83,20 @@ Flask 同时通过静态目录提供 `/script.js`、`/style.css` 等资源；不
 | `speed` | string 或 null；FFmpeg 速度倍数，支持对齐空格及科学计数法；无数据显示等待数据 |
 | `progress_indeterminate` | boolean；运行中的准备、探测、收尾及未知时长封装使用不定进度条；图表仍保留 progress 估算值 |
 | `cleanup_warning` | string；本任务临时资源清理警告；保留主错误，输出成功时以警告展示 |
+| `elapsed_seconds` | 执行后的总实际用时（秒），不含排队，包含清理；单调时钟计算，终态冻结 |
+| `stage_elapsed_seconds` | 当前／最后阶段实际用时（秒）；运行时随轮询更新 |
+| `stage_durations` | `{[stage]: seconds}`；已完成阶段及当前阶段用时，未开始／跳过的阶段无条目，与媒体时长不同 |
+| `performance_history` | `{joining_video?:Point[],joining_audio?:Point[],muxing?:Point[]}`，每阶段最近 120 个真实采样；开始运行后提供，无持久化 |
+| `disk_mbps` | number 或 null；最近采样的程序读＋写速率，MB 按 1,000,000 字节；不是整盘物理活动率，查询不可用时为 null |
+| `processing_speed` / `speed_unit` | 最近采样的处理速度／单位；拼接为复制 MB/s，封装为 FFmpeg 倍速 `x`；换阶段时重置 |
+
+`Point` 为 `{t:number,disk_mbps:number|null,speed:number|null}`，t 是任务开始后的实际秒数。拼接约每 0.5 秒及阶段结束采样；柱形为读＋写量，折线为复制量。封装在 FFmpeg progress 批次末采样，使用 Windows 进程 I/O 及 FFmpeg speed；失败／非 Windows 为未知。准备、读取时长及收尾不采样。
+
+当前已按用户要求退回上一版：按阶段查看最近 120 点，左右轴独立缩放；背景为原渐变，阶段按钮切换显示内容。连续全程图、共同 MB/s 轴、高亮与区间聚合已撤销。
+
+报告仍保留内部阶段，前端仅显示四步：拼接视频文件、拼接音频文件、读取媒体时长、封装媒体文件。准备时间并入视频拼接、收尾时间并入封装；完成是任务状态，不列为第五步。
+
+计时由 `/api/progress` 取快照时计算，复制／FFprobe 阻塞期间仍能更新。内部 `_timing` 不发给前端；进程重启后不保留。界面“封装倍速”沿用 `speed`，例如 2x 为每秒处理约 2 秒媒体，不包含前面的拼接和时长读取。
 
 `logged` 仅由前端在本次响应对象上设置，未传回后端，不是持久 API 字段。`py_logs` 是最多 100 条的滚动文本数组，无序列号和服务端时间戳；增量显示问题见 `KI-003`。
 

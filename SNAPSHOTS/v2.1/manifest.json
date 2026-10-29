@@ -1,0 +1,294 @@
+{
+  "version": "v2.1",
+  "captured_at_utc": "2026-10-29T20:34:31.719013+00:00",
+  "scope": "All project file bytes, relative paths and directories except root .git and SNAPSHOTS. Captured before snapshot-registration documentation edits.",
+  "excluded_root_entries": [
+    ".git",
+    "SNAPSHOTS"
+  ],
+  "guarantees": "File bytes, paths, file and directory set only. Not timestamps, ACLs, file IDs, Git state, running processes or external dependencies.",
+  "archive": "project.zip",
+  "archive_sha256": "f2e75f56e5c2a238bdc3e4218079015c6d0d7dadd77022b08cda89c98a696b78",
+  "file_count": 53,
+  "total_file_bytes": 270495670,
+  "directories": [
+    ".idea",
+    ".idea/inspectionProfiles",
+    "AGENTS",
+    "AGENTS/TASKS",
+    "AGENTS/TASKS/ACTIVE",
+    "AGENTS/TASKS/COMPLETED",
+    "backend",
+    "backend/__pycache__",
+    "bin",
+    "frontend",
+    "tests"
+  ],
+  "files": [
+    {
+      "path": ".idea/.gitignore",
+      "size": 190,
+      "sha256": "aefe07a52418e9d0c587b31238f7503d35e75034a769547d5e56851a1f822ccf"
+    },
+    {
+      "path": ".idea/.name",
+      "size": 7,
+      "sha256": "b10564ab7d2c520cdd0243874879fb0a782862c3c902ab535faabe57d5a505e1"
+    },
+    {
+      "path": ".idea/SteamClipExporter.iml",
+      "size": 486,
+      "sha256": "117be800ca57643f799623deba07979142ef232caa28d00255f9793289f2c466"
+    },
+    {
+      "path": ".idea/inspectionProfiles/profiles_settings.xml",
+      "size": 179,
+      "sha256": "0156739e86d393cb905f58205f66160abd542749917415ac3b5155261528ae0b"
+    },
+    {
+      "path": ".idea/misc.xml",
+      "size": 189,
+      "sha256": "5ee2b1e17cdc3fc50f0ea747fa8189c3b3cd91b0afdaa0cb9fe88f437c42ce9b"
+    },
+    {
+      "path": ".idea/modules.xml",
+      "size": 293,
+      "sha256": "e2bfb3161199938139b6466a2cca0999439c1d71a5382c87900d0e7a2d28eb76"
+    },
+    {
+      "path": ".idea/vcs.xml",
+      "size": 172,
+      "sha256": "62be7e0a7f84ab3c35b4d4bafb890a4951d061eadafde1a10aa3f5d0406db5df"
+    },
+    {
+      "path": ".idea/workspace.xml",
+      "size": 10758,
+      "sha256": "adc9a8c70398baeafbf0aca8e493f94e0339207ad10c24dc7af235fed5a78350"
+    },
+    {
+      "path": "AGENTS.md",
+      "size": 3120,
+      "sha256": "f391f392068ad62f917dd44df071ebd883002705cb45b7619d2b264e09ca8eb2"
+    },
+    {
+      "path": "AGENTS/API.md",
+      "size": 10645,
+      "sha256": "a81ff31b7b96cca0f5164374757378783611b72bcc0fc5108a5702ba3ab0e05c"
+    },
+    {
+      "path": "AGENTS/ARCHITECTURE.md",
+      "size": 7431,
+      "sha256": "ce0081f8381e49f90db59b307ab67e5ee755e52256a6909af08203b57bdecc1c"
+    },
+    {
+      "path": "AGENTS/CHANGELOG.md",
+      "size": 6302,
+      "sha256": "76446de1dadb71c23b805dbc560b50e7246201fff11d84457734e9f4f5cae315"
+    },
+    {
+      "path": "AGENTS/CURRENT_STATE.md",
+      "size": 5356,
+      "sha256": "69bf9b31315a976d9084d790b44792b0fcfdcab9b31a58629963612725e1b427"
+    },
+    {
+      "path": "AGENTS/DATA_FLOW.md",
+      "size": 5884,
+      "sha256": "44f04fc99dcf2252c340d8aca9ee53786348ed07f5c0b3e23c5214e91ecf17db"
+    },
+    {
+      "path": "AGENTS/DECISIONS.md",
+      "size": 6211,
+      "sha256": "3051e870da536b24f23bb41b084e3cd4725784197dda8491e4a9f784c2d276ad"
+    },
+    {
+      "path": "AGENTS/DEVELOPMENT_RULES.md",
+      "size": 4747,
+      "sha256": "5fd83d2a042270c9a11a01c41397d6ebaa8d6ea2e13f11ed6f8b4e3bf5eaab3a"
+    },
+    {
+      "path": "AGENTS/HANDOFF.md",
+      "size": 10910,
+      "sha256": "32c2f3f3ed643e5b97215da180afabbcadd75d695e0fad03d33c2a19f0b90cbf"
+    },
+    {
+      "path": "AGENTS/INDEX.md",
+      "size": 3873,
+      "sha256": "4d071ae640865820158d04db15f32407b2506735ddf43494bfcd8b8d77000dc7"
+    },
+    {
+      "path": "AGENTS/KNOWN_ISSUES.md",
+      "size": 10233,
+      "sha256": "43e81d274cf9ca7822b425ffa7aa1bd916afd486d8bd0b071809e268fb0e18b7"
+    },
+    {
+      "path": "AGENTS/LEARNING_GUIDE.md",
+      "size": 8263,
+      "sha256": "af17b3069aa726851e89a3a440fd5f65f11592b6def0ffeb384737701affda2a"
+    },
+    {
+      "path": "AGENTS/MODULES.md",
+      "size": 8134,
+      "sha256": "0aa651a0894aab8fdafd3b8fa635cf26be5aa840d6c92b0c03115fbf1ad523d7"
+    },
+    {
+      "path": "AGENTS/PROJECT.md",
+      "size": 3071,
+      "sha256": "7a63ff2cedd6c28343cb41828a8d81934e6dce49e56207aba9f602cd1c414811"
+    },
+    {
+      "path": "AGENTS/REQUIREMENTS.md",
+      "size": 9004,
+      "sha256": "d15339735bee6fc6f5dcb9dd2a7d5858dfc88be991ba786de77609abc05622e0"
+    },
+    {
+      "path": "AGENTS/TASKS/ACTIVE/README.md",
+      "size": 1443,
+      "sha256": "38c99b8511a8c966cbb9cad78276d1eb72cc783676156fa5afee69e0a4891705"
+    },
+    {
+      "path": "AGENTS/TASKS/COMPLETED/2026-10-29-export-path-and-sync.md",
+      "size": 5147,
+      "sha256": "1618874111642619a8a3b58de1fe49c07b977e846f480ed09dac75910a6e2b23"
+    },
+    {
+      "path": "AGENTS/TASKS/COMPLETED/2026-10-29-preview-cleanup.md",
+      "size": 3941,
+      "sha256": "792b4b263b692ad7dee1a844bdc0828962f69cbf1c15decc6f3e81f89b824f90"
+    },
+    {
+      "path": "AGENTS/TASKS/COMPLETED/2026-10-29-project-memory-bootstrap.md",
+      "size": 9775,
+      "sha256": "b1aa5ca517b99a8f414f80514eabf7b7062931ff739a19ddc43ba1f19ea348a6"
+    },
+    {
+      "path": "AGENTS/TASKS/COMPLETED/2026-10-30-export-progress.md",
+      "size": 6418,
+      "sha256": "b6a84a21d89fed0e722489424e4d4385f2615ff3507b3e4077ef21cd3822351d"
+    },
+    {
+      "path": "AGENTS/TASKS/COMPLETED/2026-10-30-task-monitor.md",
+      "size": 6124,
+      "sha256": "fa07d41bfac096d3420702304852c1ba74fad0ae6fa99d850bd577f1fff4894f"
+    },
+    {
+      "path": "README.md",
+      "size": 1151,
+      "sha256": "31616452685d8625f6d3f5d83a692f267ba3dae700458526fc0c0ad49e3f35c8"
+    },
+    {
+      "path": "app_icon.ico",
+      "size": 125578,
+      "sha256": "d992b561a2ff4f86d9bc05d3649cb053bf6f73a2754e5e6fab3f70204ae1e4f3"
+    },
+    {
+      "path": "backend/__init__.py",
+      "size": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "backend/__pycache__/__init__.cpython-312.pyc",
+      "size": 155,
+      "sha256": "372e9175a0ef64fc2a55644a05dbe2de88a9ffa15ec4fc01323d66707d647c02"
+    },
+    {
+      "path": "backend/__pycache__/app.cpython-312.pyc",
+      "size": 18161,
+      "sha256": "961c21437e5d3890138ab855499f34be2c37555244c7e98c8acfc81f8a88e71b"
+    },
+    {
+      "path": "backend/__pycache__/telemetry.cpython-312.pyc",
+      "size": 5748,
+      "sha256": "348cd6e895b61c0795533025d0f1ab59541dccf53ce9a32b4c10197965565d48"
+    },
+    {
+      "path": "backend/__pycache__/worker.cpython-312.pyc",
+      "size": 15166,
+      "sha256": "ee0d1184ff3a4caa3cc05790525753dd4928003dfd8577856b06bbd276fda569"
+    },
+    {
+      "path": "backend/app.py",
+      "size": 10417,
+      "sha256": "7e9b2d5a8dbccdc261d71f262a88923610aed8b0c47c20af5e91cf1f22e90570"
+    },
+    {
+      "path": "backend/telemetry.py",
+      "size": 3695,
+      "sha256": "06691739fa1617453187a67a5a4dc882182a3d0e2ce42b33966ba9cb8757074e"
+    },
+    {
+      "path": "backend/worker.py",
+      "size": 10581,
+      "sha256": "a189923dbbafa950c465b74844541e5fee3e6b1b8fc6a376bb4721501d8ad5bb"
+    },
+    {
+      "path": "bin/ffmpeg.exe",
+      "size": 99264000,
+      "sha256": "5af82a0d4fe2b9eae211b967332ea97edfc51c6b328ca35b827e73eac560dc0d"
+    },
+    {
+      "path": "bin/ffmpeg.zip",
+      "size": 35929661,
+      "sha256": "a32e3516898c06136468c071c2d9f00b04b7a7040bd93df4876822331939e706"
+    },
+    {
+      "path": "bin/ffprobe.exe",
+      "size": 99066368,
+      "sha256": "192a1d6899059765ac8c39764fc3148d4e6049955956dc2029f81f4bd6a8972d"
+    },
+    {
+      "path": "bin/ffprobe.zip",
+      "size": 35823926,
+      "sha256": "838f24d5776cd5c091f261743de46e80612d8da765b2208087aef4a8248add9f"
+    },
+    {
+      "path": "build.py",
+      "size": 1063,
+      "sha256": "ab079fcd06d36ef267034e88ab0f18eac6bc2a90ae56d91c9efb53b2403ac4a9"
+    },
+    {
+      "path": "frontend/index.html",
+      "size": 5376,
+      "sha256": "3d2a32efb372fa43fda710d0d4c9bfbb112b389707a09d6d3929bfb464918db7"
+    },
+    {
+      "path": "frontend/script.js",
+      "size": 24285,
+      "sha256": "c84b9b6e1b24110b113f8f326f01da41ad939ce6e7c28034c6ccbf5fc7d2d426"
+    },
+    {
+      "path": "frontend/style.css",
+      "size": 8252,
+      "sha256": "9219c0361c4025c49f55fb05a30ed23c195b47c9763948aa43974fad9a4f912d"
+    },
+    {
+      "path": "main.py",
+      "size": 833,
+      "sha256": "a03e2bddaf25b39a788be7a028da97f4bea9b399469338882cca8cb2b93b6020"
+    },
+    {
+      "path": "run_server.bat",
+      "size": 754,
+      "sha256": "a71a6ff9322cb27a9f40ae820fc4a6217805057aa2be00eda473af5bb797b61b"
+    },
+    {
+      "path": "tests/frontend.test.js",
+      "size": 8405,
+      "sha256": "8a92a99c4887a4c356836ba478fc48e9739038e655413443131ae326f1011d03"
+    },
+    {
+      "path": "tests/test_export.py",
+      "size": 7027,
+      "sha256": "28816dc5445dddecf18a8c69ac54449d15352e08babb1eb557a1a940fd04cd9e"
+    },
+    {
+      "path": "tests/test_preview.py",
+      "size": 6822,
+      "sha256": "17ce0fc5ee3032f6707e47675aa4231618729ae9b1ad7d71d29765416e8348e2"
+    },
+    {
+      "path": "tests/test_progress.py",
+      "size": 9940,
+      "sha256": "1f8175b1186601e98598284a4a4480ecaa2aa0218223f4aac3d82d41d0954de2"
+    }
+  ]
+}

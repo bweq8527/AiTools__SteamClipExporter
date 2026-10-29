@@ -3,6 +3,13 @@ let allClips = [];
 let viewMode = 'flat';
 let currentAlbum = null;
 let pathUpdate = Promise.resolve();
+let monitorStatuses = {}, selectedTaskId = null, selectedMonitorPhase = null;
+let followRunningTask = true, lastMonitorKey = '';
+const monitorPhases = {
+    joining_video: { label: '拼接视频文件', bar: '#2798f5', line: '#8caec9', unit: 'MB/s' },
+    joining_audio: { label: '拼接音频文件', bar: '#27c178', line: '#91b5a4', unit: 'MB/s' },
+    muxing: { label: '封装媒体文件', bar: '#f29432', line: '#c6ad91', unit: 'x' }
+};
 
 // 路径请求串行提交，避免选择器与入队操作交错后恢复旧配置。
 function submitPaths(url, data, afterSave = async () => {}) {
@@ -61,14 +68,102 @@ function formatDate(ts) {
 function initChart() {
     chart = new Chart(document.getElementById('chart'), {
         type: 'bar',
-        data: { labels: [], datasets: [{ label: '整体进度（阶段加权估算）', data: [], backgroundColor: '#2196f3', borderRadius: 4 }] },
+        data: { labels: [], datasets: [
+            { type: 'bar', label: '磁盘读写 MB/s', data: [], yAxisID: 'disk', backgroundColor: '#2798f5', borderRadius: 2, order: 2 },
+            { type: 'line', label: '封装速度 MB/s', data: [], yAxisID: 'speed', borderColor: '#8caec9', borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, cubicInterpolationMode: 'monotone', spanGaps: false, order: 1 }
+        ] },
         options: {
-            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { x: { max:100, min:0, grid: { color: '#333' } }, y: { grid: { display: false }, ticks: { color: '#888', font: { size: 10 } } } }
+            responsive: true, maintainAspectRatio: false,
+            animation: { duration: 450, easing: 'easeOutQuart' },
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { display: false }, tooltip: { filter: item => item.raw !== null } },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: '#738494', maxTicksLimit: 4, maxRotation: 0, autoSkip: true } },
+                disk: { position: 'left', beginAtZero: true, suggestedMax: 1, title: { display: true, text: '磁盘 MB/s', color: '#8c9eae' }, grid: { color: '#253240' }, ticks: { color: '#738494', maxTicksLimit: 4 } },
+                speed: { position: 'right', beginAtZero: true, suggestedMax: 1, title: { display: true, text: '速度 MB/s', color: '#8c9eae' }, grid: { drawOnChartArea: false }, ticks: { color: '#738494', maxTicksLimit: 4 } }
+            }
         }
     });
+    document.getElementById('monitor-follow').onclick = () => {
+        followRunningTask = true;
+        selectedMonitorPhase = null;
+        refreshTaskMonitor();
+    };
+    for (const [phase, config] of Object.entries(monitorPhases)) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = config.label;
+        button.dataset.phase = phase;
+        button.style.setProperty('--phase-color', config.bar);
+        button.onclick = () => { selectedMonitorPhase = phase; refreshTaskMonitor(); };
+        document.getElementById('monitor-phases').appendChild(button);
+    }
+    refreshTaskMonitor();
     log('l-front', 'CORE', '控制台引擎加载完毕', 'front-color');
+}
+
+function selectMonitorTask(id) {
+    selectedTaskId = id;
+    followRunningTask = false;
+    selectedMonitorPhase = null;
+    refreshTaskMonitor();
+}
+
+function refreshTaskMonitor() {
+    if (!chart) return;
+    const ids = Object.keys(monitorStatuses);
+    const previousTaskId = selectedTaskId;
+    if (followRunningTask || !monitorStatuses[selectedTaskId]) {
+        selectedTaskId = ids.find(id => monitorStatuses[id].status === 'running') || ids.at(-1) || null;
+    }
+    if (previousTaskId !== selectedTaskId) selectedMonitorPhase = null;
+    const s = monitorStatuses[selectedTaskId];
+    const history = s?.performance_history || {};
+    const available = Object.keys(monitorPhases).filter(phase => history[phase]?.length);
+    const currentPhase = monitorPhases[s?.stage] ? s.stage : available.at(-1) || 'joining_video';
+    const phase = selectedMonitorPhase || currentPhase;
+    const config = monitorPhases[phase];
+    const points = history[phase] || [];
+    const last = points.at(-1);
+    const live = s?.status === 'running' && s.stage === phase;
+    const formatRate = value => Number.isFinite(value) ? value.toLocaleString('zh-CN', { maximumFractionDigits: 1 }) : '—';
+    document.getElementById('monitor-task').textContent = selectedTaskId || '等待导出任务';
+    document.getElementById('monitor-state').textContent = !s ? '点击下方任务查看数据' :
+        s.stage === 'probing' ? '读取媒体时长 · 暂停采样' :
+        s.status === 'finished' ? '导出成功 · 查看阶段记录' :
+        s.status === 'error' ? '导出失败 · 保留已有数据' : `${config.label}${live ? ' · 实时' : ' · 阶段记录'}`;
+    document.getElementById('monitor-disk').textContent = `${formatRate(last?.disk_mbps)} MB/s`;
+    document.getElementById('monitor-speed').textContent = `${formatRate(last?.speed)} ${config.unit}`;
+    document.getElementById('monitor-time').textContent = formatMediaTime(s?.elapsed_seconds);
+    document.getElementById('monitor-empty').hidden = points.length > 0;
+    document.getElementById('monitor-empty').textContent = s?.stage === 'probing' ? '读取媒体时长期间不绘制曲线' : '该阶段暂无采样数据';
+    document.getElementById('monitor-panel').style.setProperty('--monitor-color', config.bar);
+    document.getElementById('monitor-panel').classList.toggle('is-live', live);
+    document.getElementById('monitor-follow').classList.toggle('active', followRunningTask);
+    document.querySelectorAll('#monitor-phases button').forEach(button => {
+        button.classList.toggle('active', button.dataset.phase === phase);
+        button.setAttribute('aria-pressed', String(button.dataset.phase === phase));
+    });
+    document.querySelectorAll('.q-item').forEach(item => {
+        const active = item.id === `q-${selectedTaskId}`;
+        item.classList.toggle('q-selected', active);
+        item.setAttribute('aria-pressed', String(active));
+    });
+    const key = `${selectedTaskId}:${phase}:${points.length}:${last?.t}`;
+    if (key === lastMonitorKey) return;
+    const changedView = !lastMonitorKey.startsWith(`${selectedTaskId}:${phase}:`);
+    lastMonitorKey = key;
+    // 固定窗口从右侧填充；只使用真实采样，空位保持空白。
+    const padding = Array(Math.max(0, 120 - points.length)).fill(null);
+    chart.data.labels = [...padding.map(() => ''), ...points.map(point => formatMediaTime(point.t))];
+    chart.data.datasets[0].data = [...padding, ...points.map(point => point.disk_mbps)];
+    chart.data.datasets[0].backgroundColor = config.bar;
+    chart.data.datasets[1].data = [...padding, ...points.map(point => point.speed)];
+    chart.data.datasets[1].borderColor = config.line;
+    chart.data.datasets[1].pointRadius = points.length === 1 ? 2 : 0;
+    chart.data.datasets[1].label = `封装速度 ${config.unit}`;
+    chart.options.scales.speed.title.text = `速度 ${config.unit}`;
+    chart.update(changedView ? 'none' : undefined);
 }
 
 // --- 新增：播放器逻辑 ---
@@ -287,11 +382,21 @@ function formatMediaTime(seconds) {
 
 function renderQueueProgress(item, id, s) {
     const stages = {
-        preparing: '准备素材', joining_video: '拼接视频', joining_audio: '拼接音频',
-        probing: '读取媒体时长', muxing: 'FFmpeg 封装', finalizing: '收尾', finished: '完成'
+        joining_video: '拼接视频文件', joining_audio: '拼接音频文件',
+        probing: '读取媒体时长', muxing: '封装媒体文件'
     };
     item.replaceChildren();
     item.className = `q-item${s.status === 'error' ? ' q-error' : s.status === 'finished' ? ' q-finished' : ''}`;
+    item.tabIndex = 0;
+    item.setAttribute('role', 'button');
+    item.setAttribute('aria-label', `查看任务 ${id} 的性能图表`);
+    item.onclick = () => selectMonitorTask(id);
+    item.onkeydown = event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            selectMonitorTask(id);
+        }
+    };
     const addText = (tag, text, className = '') => {
         const element = document.createElement(tag);
         element.className = className;
@@ -299,9 +404,24 @@ function renderQueueProgress(item, id, s) {
         item.appendChild(element);
         return element;
     };
-    addText('b', id, 'q-title');
-    const stage = stages[s.stage] || s.eta || '排队中';
+    addText('b', `${id}${s.status === 'finished' ? ' · 已完成' : ''}`, 'q-title');
+    const reportStage = s.stage === 'preparing' ? 'joining_video' :
+        ['finalizing', 'finished'].includes(s.stage) ? 'muxing' : s.stage;
+    const stage = stages[reportStage] || s.eta || '排队中';
     addText('div', s.status === 'error' ? `失败 · ${stage}` : stage, 'q-stage');
+    if (Number.isFinite(s.elapsed_seconds)) {
+        addText('div', `总用时：${s.elapsed_seconds.toFixed(1)} 秒（不含排队）`, 'q-detail');
+        const durations = { ...(s.stage_durations || {}) };
+        if (Number.isFinite(durations.preparing)) durations.joining_video = (durations.joining_video || 0) + durations.preparing;
+        if (Number.isFinite(durations.finalizing)) durations.muxing = (durations.muxing || 0) + durations.finalizing;
+        const timings = Object.entries(stages).map(([key, label]) => {
+            if (key === 'joining_audio' && s.has_audio === false) return `${label}：跳过`;
+            if (!Number.isFinite(durations[key])) return `${label}：待开始`;
+            const current = s.status === 'running' && reportStage === key ? '（进行中）' : '';
+            return `${label}：${durations[key].toFixed(1)} 秒${current}`;
+        });
+        addText('div', timings.join(' · '), 'q-detail');
+    }
     if (s.stage) {
         addText('div', `视频分段：${s.video_done || 0} / ${s.video_total || 0}`, 'q-detail');
         const audio = s.has_audio === false ? '无音轨，跳过音频拼接' :
@@ -310,7 +430,12 @@ function renderQueueProgress(item, id, s) {
         if (['muxing', 'finalizing', 'finished'].includes(s.stage)) {
             const duration = s.duration_seconds > 0 ? formatMediaTime(s.duration_seconds) : '总时长未知';
             addText('div', `已处理媒体：${formatMediaTime(s.processed_seconds)} / ${duration}`, 'q-detail');
-            addText('div', `处理速度：${s.speed || '等待数据'}`, 'q-detail');
+        }
+        if (Number.isFinite(s.processing_speed)) {
+            const speed = addText('div', `封装速度：${s.processing_speed.toFixed(1)} ${s.speed_unit}`, 'q-detail');
+            speed.title = s.speed_unit === 'x' ? '2x 表示 FFmpeg 每秒处理约 2 秒录像。' : '拼接阶段按每秒复制的数据量计算。';
+        } else if (s.speed && ['muxing', 'finalizing', 'finished'].includes(s.stage)) {
+            addText('div', `封装速度：${s.speed}`, 'q-detail');
         }
     }
     if (s.status === 'error') addText('div', s.eta || '导出失败，请查看日志', 'q-message');
@@ -329,6 +454,7 @@ async function tick() {
     try {
         const res = await axios.get('/api/progress');
         const stats = res.data.all_statuses, pyl = res.data.py_logs;
+        monitorStatuses = stats;
         if(pyl.length > pyIdx) {
             for(let i=pyIdx; i<pyl.length; i++) {
                 const msg = pyl[i];
@@ -338,10 +464,8 @@ async function tick() {
             pyIdx = pyl.length;
         }
         const qDiv = document.getElementById('qList');
-        let lbs = [], dat = [], activeCount = 0;
         for(let id in stats) {
             const s = stats[id];
-            activeCount++;
             if(s.status === 'running' && s.last_raw_log) {
                 if (window[`lastLog_${id}`] !== s.last_raw_log) {
                     log('l-ffmpeg', 'EXEC', `${id.slice(-6)}: ${s.last_raw_log}`, 'ffmpeg-color');
@@ -353,8 +477,6 @@ async function tick() {
                 s.logged = true;
                 load();
             }
-            lbs.push(id.slice(-6));
-            dat.push(s.progress);
             let existingItem = document.getElementById(`q-${id}`);
             if (!existingItem) {
                 existingItem = document.createElement('div');
@@ -364,11 +486,7 @@ async function tick() {
             }
             renderQueueProgress(existingItem, id, s);
         }
-        if(activeCount > 0 && chart) {
-            chart.data.labels = lbs;
-            chart.data.datasets[0].data = dat;
-            chart.update('none');
-        }
+        refreshTaskMonitor();
     } catch (e) {}
 }
 

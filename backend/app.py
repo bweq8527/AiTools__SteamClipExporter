@@ -22,9 +22,9 @@ app = Flask(__name__, static_folder=get_res_path('frontend'), static_url_path=''
 CORS(app)
 
 try:
-    from backend.worker import convert_clip, generate_quick_thumb, get_ffmpeg_tool, get_hide_config
+    from backend.worker import convert_clip, generate_quick_thumb, get_ffmpeg_tool, get_hide_config, get_progress_snapshot
 except ImportError:
-    from worker import convert_clip, generate_quick_thumb, get_ffmpeg_tool, get_hide_config
+    from worker import convert_clip, generate_quick_thumb, get_ffmpeg_tool, get_hide_config, get_progress_snapshot
 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
@@ -258,4 +258,5 @@ def add_q():
 
 @app.route('/api/progress')
 def get_prog():
-    return jsonify({"all_statuses": CONVERSION_STATUS, "py_logs": PYTHON_LOGS})
+    statuses = {cid: get_progress_snapshot(status) for cid, status in list(CONVERSION_STATUS.items())}
+    return jsonify({"all_statuses": statuses, "py_logs": PYTHON_LOGS})

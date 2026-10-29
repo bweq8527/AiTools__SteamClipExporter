@@ -1,5 +1,9 @@
 # AI 项目入口
 
+## 命名快照
+
+用户已保存精确文件快照 **v2.1**，登记与恢复步骤见 [SNAPSHOTS/README.md](SNAPSHOTS/README.md)。以后用户要求“恢复为 v2.1”时，必须从归档按清单恢复并校验，不能按描述重建；不自动操作 Git。精确恢复完成后的记录只写在 SNAPSHOTS 内，不能为了更新记忆而改动刚还原并校验的文件。
+
 SteamClipExporter 是将 Steam 本地录像分段批量导出为 MP4 的工具，使用原生 Web 前端、Python Flask、pywebview 和 FFmpeg。全部项目记忆位于 [AGENTS/INDEX.md](AGENTS/INDEX.md)，供用户学习及不同会话、账号、电脑和 AI 工具交接。不要依赖此前聊天记录。
 
 ## A．新会话启动

@@ -4,6 +4,11 @@ import glob
 import subprocess
 import re
 import math
+import time
+try:
+    from backend.telemetry import TaskMonitor, get_process_io_bytes
+except ImportError:
+    from telemetry import TaskMonitor, get_process_io_bytes
 
 def get_ffmpeg_tool(name='ffmpeg.exe'):
     """适配打包路径的工具获取函数"""
@@ -49,17 +54,50 @@ def generate_quick_thumb(folder, t_path):
     finally:
         if os.path.exists(tmp): os.remove(tmp)
 
+def get_progress_snapshot(status):
+    """轮询时计算真实用时，媒体子进程阻塞期间也能继续计时。"""
+    snapshot = status.copy()
+    timing = snapshot.pop('_timing', None)
+    if timing is not None:
+        now = timing['ended'] if timing['ended'] is not None else time.monotonic()
+        durations = timing['completed'].copy()
+        stage_elapsed = max(0, now - timing['stage_started'])
+        if timing['stage'] != 'finished':
+            durations[timing['stage']] = stage_elapsed
+        snapshot.update(elapsed_seconds=max(0, now - timing['started']),
+                        stage_elapsed_seconds=stage_elapsed, stage_durations=durations)
+    return snapshot
+
+
 def convert_clip(folder, out, status):
     """按阶段报告进度；分段完整复制后才增加计数，保留两轨时间轴。"""
     ffmpeg = get_ffmpeg_tool('ffmpeg.exe')
     tmp_v, tmp_a = out + ".v", out + ".a"
     process = None
     temporary_files = []
+    started = time.monotonic()
     status.update(status='running', stage='preparing', progress=0,
                   eta='正在检查素材分段', video_done=0, video_total=0,
                   audio_done=0, audio_total=0, has_audio=None,
                   processed_seconds=0, duration_seconds=0, speed=None,
-                  progress_indeterminate=True, cleanup_warning='')
+                  progress_indeterminate=True, cleanup_warning='',
+                  _timing=dict(started=started, stage_started=started,
+                               stage='preparing', completed={}, ended=None))
+    monitor = TaskMonitor(status, started)
+
+    def set_stage(stage, **fields):
+        previous = status['_timing']
+        if stage != previous['stage']:
+            now = time.monotonic()
+            completed = previous['completed'].copy()
+            completed[previous['stage']] = max(0, now - previous['stage_started'])
+            # 替换完整计时快照，避免轮询读取到正在被修改的阶段字典。
+            status.update(stage=stage, _timing=dict(
+                started=started, stage_started=now, stage=stage,
+                completed=completed, ended=None), **fields)
+        else:
+            status.update(**fields)
+
     try:
         s_dirs = glob.glob(os.path.join(folder, 'video', 'fg_*'))
         if not s_dirs:
@@ -83,7 +121,9 @@ def convert_clip(folder, out, status):
             tracks.append(('audio', a_init, a_chks, tmp_a))
         for kind, init, chunks, target in tracks:
             label = '视频' if kind == 'video' else '音频'
-            status.update(stage=f'joining_{kind}', eta=f'正在拼接{label}分段', progress_indeterminate=False)
+            set_stage(f'joining_{kind}', eta=f'正在拼接{label}分段', progress_indeterminate=False)
+            monitor.start(f'joining_{kind}')
+            track_bytes = 0
             with open(target, 'wb') as merged:
                 temporary_files.append(target)
                 for index, source in enumerate([init, *chunks]):
@@ -94,17 +134,22 @@ def convert_clip(folder, out, status):
                                 break
                             merged.write(block)
                             copied_bytes += len(block)
+                            track_bytes += len(block)
+                            monitor.record(processed_bytes=track_bytes)
                             # 0–40% 按字节估算；init 不计入完成的 chunk 数。
                             status.update(progress=min(40, int(copied_bytes / total_bytes * 40)))
                     if index:
                         status.update(**{f'{kind}_done': index})
+            monitor.record(processed_bytes=track_bytes, force=True)
 
-        status.update(stage='probing', progress=40, eta='正在读取媒体时长', progress_indeterminate=True)
+        set_stage('probing', progress=40, eta='正在读取媒体时长', progress_indeterminate=True)
         duration = get_video_duration(tmp_v)
         if not math.isfinite(duration) or duration <= 0:
             duration = 0
-        status.update(stage='muxing', duration_seconds=duration,
-                      eta='正在封装 MP4', progress_indeterminate=duration == 0)
+        set_stage('muxing', duration_seconds=duration,
+                  eta='正在封装 MP4', progress_indeterminate=duration == 0)
+        monitor.start('muxing')
+        mux_speed = None
 
         # 音频以视频的起始时间为参考，保留两路分段的相对偏移。
         # 不直接 copyts：大源时间戳会使 FFmpeg 的进度时间保持为零。
@@ -131,10 +176,13 @@ def convert_clip(folder, out, status):
                     status.update(processed_seconds=seconds, progress=progress)
                 elif key == 'speed' and re.fullmatch(r'\d+(?:\.\d+)?(?:[eE][+-]?\d+)?x', value) and math.isfinite(float(value[:-1])):
                     status.update(speed=value)
-                elif key == 'progress' and value == 'end':
-                    status.update(stage='finalizing', progress=99, eta='正在完成写入并确认结果', progress_indeterminate=True)
+                    mux_speed = float(value[:-1])
+                elif key == 'progress':
+                    monitor.record(io_bytes=get_process_io_bytes(process), speed=mux_speed, force=value == 'end')
+                    if value == 'end':
+                        set_stage('finalizing', progress=99, eta='正在完成写入并确认结果', progress_indeterminate=True)
 
-        status.update(stage='finalizing', progress=99, eta='正在完成写入并确认结果', progress_indeterminate=True)
+        set_stage('finalizing', progress=99, eta='正在完成写入并确认结果', progress_indeterminate=True)
         if process.wait() != 0:
             raise RuntimeError('FFmpeg 封装失败，请查看 FFmpeg 日志')
         if not os.path.isfile(out) or os.path.getsize(out) == 0:
@@ -159,5 +207,7 @@ def convert_clip(folder, out, status):
             except OSError as e:
                 status['cleanup_warning'] += f' {os.path.basename(path)}: {e}'
     if status['status'] != 'error':
-        status.update(status='finished', stage='finished', progress=100,
-                      eta='转换完成', progress_indeterminate=False)
+        set_stage('finished', status='finished', progress=100,
+                  eta='转换完成', progress_indeterminate=False)
+    # 成功或失败均冻结用时；包含清理耗时，不包含队列等待。
+    status['_timing'] = dict(status['_timing'], ended=time.monotonic())
