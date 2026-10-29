@@ -72,4 +72,6 @@ flowchart LR
 
 导出拼接 init 与 chunks 后调用 FFmpeg `-c copy`，有 stream1 时在音频输入前使用 `-isync 0` 以视频输入起点为参考，保留两路相对偏移；输出端 `-avoid_negative_ts make_zero` 对所有轨道统一平移。合成分段已验证音频早／晚、B 帧、大时间戳、无音轨及进度；真实 Steam 素材仍待验收。本地 FFmpeg 8.0.1 支持该参数，替换旧工具时需核实。无用户可选编码和格式配置。预览单独走 stream0 前 10 段的 H.264 流式转换，不等同完整导出，也没有 Range／定位处理。缺片段、多个 `fg_*`、损坏数据和输出覆盖等风险统一见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
 
+2026-10-30 导出进度按阶段发布，两轨 chunk 分别计数，拼接按总字节估算，封装按 FFprobe 时长及 FFmpeg 媒体时间估算；未知时长不定显示，成功前不达 100%。仍使用原 `/api/progress`，字段见 [API.md](API.md)。完成检查退出码及非空文件，清理警告单独展示；未增加恢复／持久化或改变输出覆盖规则。
+
 现有 README 声称添加 FFmpeg 至 PATH，但当前代码直接调用 `bin/` 中的 exe，且 bat 的依赖安装不完整。本轮保留原文，通过本文件说明差异；未来变更需独立授权。

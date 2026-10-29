@@ -53,23 +53,25 @@ sequenceDiagram
     UI->>UI: 清空 sel，调用 load()
     Q->>W: 单 worker 按 FIFO 取任务
     W->>W: 标记 running
-    W->>FS: 拼接 stream0 到 .v，可选 stream1 到 .a
-    W->>FF: FFprobe 获取视频时长
+    W->>FS: 检查分段，逐块拼接 stream0 到 .v、可选 stream1 到 .a
+    W->>W: 完整 chunk 才计数，两轨分别报告；无音轨明确跳过
+    W->>FF: 发布 probing，FFprobe 获取视频时长（保留）
     W->>FF: 音频输入 -isync 0，-c copy，输出端 make_zero 统一平移，输出 MP4及进度
     FF-->>W: out_time_ms 等输出行
-    W->>W: 更新共享 progress / eta / last_raw_log
+    W->>W: 更新阶段、两轨计数、媒体时长／速度及估算 progress
     loop 每秒
         UI->>API: GET /api/progress
         API-->>UI: all_statuses / py_logs
         UI->>UI: 更新任务卡、进度条、图表和日志
     end
-    W->>W: 当前代码在进程结束后标记 finished
-    W->>FS: finally 清理 .v 和 .a
+    W->>W: 发布 finalizing，等待退出并检查退出码／非空输出
+    W->>FS: 清理本任务创建的 .v 和 .a，失败显示清理警告
+    W->>W: 成功才 finished／100，失败保留阶段和计数
     UI->>API: 看到 finished 后调用 load()
     API-->>UI: 更新 is_converted 等字段
 ```
 
-上图描述当前调用链，**不保证进程退出意味着转换成功**：当前未检查返回码。`load()` 仅在显式 verbose 或数量变化时重绘，完成后状态可能不反映到卡片；问题详情由 `KI-001`、`KI-002` 维护。
+2026-10-30 已检查 FFmpeg 返回码与非空输出，worker 日志依据终态；不等于完整媒体校验，旧 MP4 仍只按存在判定。`load()` 仅在显式 verbose 或数量变化时重绘，素材卡片可能未反映完成；见 `KI-001`、`KI-002`。阶段可能快于一秒轮询，界面不保证逐一停留。无恢复记录，重启仍不续作。
 
 转换时使用入队时已捕获的完整路径；共享状态只按 cid 索引。中途切换素材库时，任务仍运行原路径，但新素材库可能和旧库 cid 冲突，详见 `KI-004`。
 

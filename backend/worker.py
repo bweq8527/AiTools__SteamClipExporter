@@ -3,6 +3,7 @@ import sys
 import glob
 import subprocess
 import re
+import math
 
 def get_ffmpeg_tool(name='ffmpeg.exe'):
     """适配打包路径的工具获取函数"""
@@ -49,37 +50,61 @@ def generate_quick_thumb(folder, t_path):
         if os.path.exists(tmp): os.remove(tmp)
 
 def convert_clip(folder, out, status):
-    """
-    核心转换逻辑 (复原版)
-    保留所有原有注释和进度分配逻辑
-    """
+    """按阶段报告进度；分段完整复制后才增加计数，保留两轨时间轴。"""
     ffmpeg = get_ffmpeg_tool('ffmpeg.exe')
-    s_dirs = glob.glob(os.path.join(folder, 'video', 'fg_*'))
-    if not s_dirs: return
-    s_f = s_dirs[0]
-
-    status['progress'] = 5
-    status['eta'] = "正在准备流数据..."
-    v_init, v_chks = os.path.join(s_f, 'init-stream0.m4s'), sorted(glob.glob(os.path.join(s_f, 'chunk-stream0-*.m4s')))
-    a_init, a_chks = os.path.join(s_f, 'init-stream1.m4s'), sorted(glob.glob(os.path.join(s_f, 'chunk-stream1-*.m4s')))
     tmp_v, tmp_a = out + ".v", out + ".a"
-
+    process = None
+    temporary_files = []
+    status.update(status='running', stage='preparing', progress=0,
+                  eta='正在检查素材分段', video_done=0, video_total=0,
+                  audio_done=0, audio_total=0, has_audio=None,
+                  processed_seconds=0, duration_seconds=0, speed=None,
+                  progress_indeterminate=True, cleanup_warning='')
     try:
-        with open(tmp_v, 'wb') as f:
-            with open(v_init, 'rb') as i: f.write(i.read())
-            for c in v_chks:
-                with open(c, 'rb') as chunk: f.write(chunk.read())
+        s_dirs = glob.glob(os.path.join(folder, 'video', 'fg_*'))
+        if not s_dirs:
+            raise ValueError('未找到录像流目录')
+        s_f = s_dirs[0]
+        v_init = os.path.join(s_f, 'init-stream0.m4s')
+        a_init = os.path.join(s_f, 'init-stream1.m4s')
+        v_chks = sorted(glob.glob(os.path.join(s_f, 'chunk-stream0-*.m4s')))
+        a_chks = sorted(glob.glob(os.path.join(s_f, 'chunk-stream1-*.m4s')))
+        has_a = os.path.exists(a_init)
+        status.update(video_total=len(v_chks), audio_total=len(a_chks), has_audio=has_a)
+        if not v_chks or (has_a and not a_chks) or (a_chks and not has_a):
+            raise ValueError('音视频分段或初始化文件不完整')
+        sources = [v_init, *v_chks] + ([a_init, *a_chks] if has_a else [])
+        sizes = [os.path.getsize(path) for path in sources]
+        if any(size == 0 for size in sizes):
+            raise ValueError('素材包含空的初始化文件或分段')
+        total_bytes, copied_bytes = sum(sizes), 0
+        tracks = [('video', v_init, v_chks, tmp_v)]
+        if has_a:
+            tracks.append(('audio', a_init, a_chks, tmp_a))
+        for kind, init, chunks, target in tracks:
+            label = '视频' if kind == 'video' else '音频'
+            status.update(stage=f'joining_{kind}', eta=f'正在拼接{label}分段', progress_indeterminate=False)
+            with open(target, 'wb') as merged:
+                temporary_files.append(target)
+                for index, source in enumerate([init, *chunks]):
+                    with open(source, 'rb') as segment:
+                        while True:
+                            block = segment.read(1024 * 1024)
+                            if not block:
+                                break
+                            merged.write(block)
+                            copied_bytes += len(block)
+                            # 0–40% 按字节估算；init 不计入完成的 chunk 数。
+                            status.update(progress=min(40, int(copied_bytes / total_bytes * 40)))
+                    if index:
+                        status.update(**{f'{kind}_done': index})
 
-        has_a = False
-        if os.path.exists(a_init):
-            has_a = True
-            with open(tmp_a, 'wb') as f:
-                with open(a_init, 'rb') as i: f.write(i.read())
-                for c in a_chks:
-                    with open(c, 'rb') as chunk: f.write(chunk.read())
-
+        status.update(stage='probing', progress=40, eta='正在读取媒体时长', progress_indeterminate=True)
         duration = get_video_duration(tmp_v)
-        status['progress'] = 15
+        if not math.isfinite(duration) or duration <= 0:
+            duration = 0
+        status.update(stage='muxing', duration_seconds=duration,
+                      eta='正在封装 MP4', progress_indeterminate=duration == 0)
 
         # 音频以视频的起始时间为参考，保留两路分段的相对偏移。
         # 不直接 copyts：大源时间戳会使 FFmpeg 的进度时间保持为零。
@@ -97,22 +122,42 @@ def convert_clip(folder, out, status):
         with process.stdout:
             for line in process.stdout:
                 status['last_raw_log'] = line.strip()
-                if 'out_time_ms' in line and duration > 0:
-                    ms_match = re.search(r'out_time_ms=(\d+)', line)
-                    if ms_match:
-                        curr_ms = int(ms_match.group(1))
-                        curr_sec = curr_ms / 1000000.0
-                        real_p = 15 + int((curr_sec / duration) * 84)
-                        status['progress'] = min(real_p, 99)
-                        status['eta'] = f"处理中: {int(curr_sec)}s / {int(duration)}s"
+                key, _, value = line.strip().partition('=')
+                value = value.strip()
+                if key in ('out_time_us', 'out_time_ms') and re.fullmatch(r'-?\d+', value):
+                    # FFmpeg 的旧字段 out_time_ms 实际同样以微秒计。
+                    seconds = max(status['processed_seconds'], int(value) / 1000000.0, 0)
+                    progress = min(98, 40 + int(seconds / duration * 58)) if duration else 40
+                    status.update(processed_seconds=seconds, progress=progress)
+                elif key == 'speed' and re.fullmatch(r'\d+(?:\.\d+)?(?:[eE][+-]?\d+)?x', value) and math.isfinite(float(value[:-1])):
+                    status.update(speed=value)
+                elif key == 'progress' and value == 'end':
+                    status.update(stage='finalizing', progress=99, eta='正在完成写入并确认结果', progress_indeterminate=True)
 
-        process.wait()
-        status['progress'] = 100
-        status['eta'] = "转换完成"
-        status['status'] = 'finished'
+        status.update(stage='finalizing', progress=99, eta='正在完成写入并确认结果', progress_indeterminate=True)
+        if process.wait() != 0:
+            raise RuntimeError('FFmpeg 封装失败，请查看 FFmpeg 日志')
+        if not os.path.isfile(out) or os.path.getsize(out) == 0:
+            raise RuntimeError('FFmpeg 未生成有效的非空输出文件')
     except Exception as e:
-        status['status'] = 'error'
-        status['eta'] = f"出错: {str(e)}"
+        status.update(status='error', eta=f'出错: {str(e)}', progress_indeterminate=False)
     finally:
-        for f in [tmp_v, tmp_a]:
-            if os.path.exists(f): os.remove(f)
+        # 异常读取 stdout 时也必须等进程退出后再清理 Windows 输入文件。
+        if process is not None and process.poll() is None:
+            try:
+                process.terminate()
+                try:
+                    process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=3)
+            except Exception as e:
+                status['cleanup_warning'] = str(e)
+        for path in temporary_files:
+            try:
+                if os.path.exists(path): os.remove(path)
+            except OSError as e:
+                status['cleanup_warning'] += f' {os.path.basename(path)}: {e}'
+    if status['status'] != 'error':
+        status.update(status='finished', stage='finished', progress=100,
+                      eta='转换完成', progress_indeterminate=False)

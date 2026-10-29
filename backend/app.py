@@ -50,7 +50,13 @@ def worker_thread():
         add_py_log(f"开始转换: {cid}")
         try:
             convert_clip(folder, out, CONVERSION_STATUS[cid])
-            add_py_log(f"转换完成: {cid}")
+            result = CONVERSION_STATUS[cid]
+            if result['status'] == 'finished':
+                add_py_log(f"转换完成: {cid}")
+            else:
+                add_py_log(f"转换出错: {cid}: {result['eta']}")
+            if result.get('cleanup_warning'):
+                add_py_log(f"临时文件清理警告: {cid}: {result['cleanup_warning']}")
         except Exception as e:
             CONVERSION_STATUS[cid]['status'] = 'error'
             CONVERSION_STATUS[cid]['eta'] = str(e)

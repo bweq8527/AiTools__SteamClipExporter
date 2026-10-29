@@ -70,10 +70,19 @@ Flask 同时通过静态目录提供 `/script.js`、`/style.css` 等资源；不
 
 | Status 字段 | 含义 |
 | --- | --- |
-| `status` | `pending` → `running` → `finished` 或 `error`；异常流程有静态风险，不保证总能到终态 |
-| `progress` | 0 入队，准备 5、探测后 15，FFmpeg 时间映射至最多 99，结束置 100；异常时保留已有值 |
-| `eta` | 展示文本，准备阶段／已处理秒数／完成或错误；不是可靠的剩余时间数字 |
+| `status` | `pending` → `running` → `finished` 或 `error`；完成前检查 FFmpeg 零退出码与非空输出，非完整性保证 |
+| `progress` | 阶段加权估算：拼接按字节映射 0–40，读取时长 40，封装按媒体时间映射 40–98，收尾 99，成功才 100；非剩余耗时预测 |
+| `eta` | 阶段说明、完成或错误文本；不是剩余时间数字 |
 | `last_raw_log` | 可选 string；最近 FFmpeg 输出行，stderr 已合并到 stdout |
+| `stage` | 执行后提供 `preparing/joining_video/joining_audio/probing/muxing/finalizing/finished`；错误保留失败阶段，无音轨跳过 joining_audio |
+| `video_done` / `video_total` | 视频完整复制的 chunk 数／发现的 chunk 总数，不计 init；执行开始时为 0 |
+| `audio_done` / `audio_total` | 音频独立计数，不假设和视频相等；不计 init |
+| `has_audio` | null 为待检查，false 为无独立音轨，true 为发现音频 init；缺少配套 chunk 会失败 |
+| `processed_seconds` | FFmpeg 已处理媒体时长（秒），非程序运行耗时；负值归零、异常值忽略 |
+| `duration_seconds` | FFprobe 视频时长；不可用／非有限值统一为 0，前端显示总时长未知 |
+| `speed` | string 或 null；FFmpeg 速度倍数，支持对齐空格及科学计数法；无数据显示等待数据 |
+| `progress_indeterminate` | boolean；运行中的准备、探测、收尾及未知时长封装使用不定进度条；图表仍保留 progress 估算值 |
+| `cleanup_warning` | string；本任务临时资源清理警告；保留主错误，输出成功时以警告展示 |
 
 `logged` 仅由前端在本次响应对象上设置，未传回后端，不是持久 API 字段。`py_logs` 是最多 100 条的滚动文本数组，无序列号和服务端时间戳；增量显示问题见 `KI-003`。
 

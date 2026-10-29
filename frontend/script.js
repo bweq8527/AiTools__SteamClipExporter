@@ -61,7 +61,7 @@ function formatDate(ts) {
 function initChart() {
     chart = new Chart(document.getElementById('chart'), {
         type: 'bar',
-        data: { labels: [], datasets: [{ data: [], backgroundColor: '#2196f3', borderRadius: 4 }] },
+        data: { labels: [], datasets: [{ label: '整体进度（阶段加权估算）', data: [], backgroundColor: '#2196f3', borderRadius: 4 }] },
         options: {
             indexAxis: 'y', responsive: true, maintainAspectRatio: false,
             plugins: { legend: { display: false } },
@@ -277,6 +277,54 @@ async function addQ() {
     });
 }
 
+function formatMediaTime(seconds) {
+    const total = Math.floor(Math.max(0, Number.isFinite(seconds) ? seconds : 0));
+    const hours = Math.floor(total / 3600);
+    const minutes = String(Math.floor(total / 60) % 60).padStart(2, '0');
+    const remainder = String(total % 60).padStart(2, '0');
+    return `${hours ? String(hours).padStart(2, '0') + ':' : ''}${minutes}:${remainder}`;
+}
+
+function renderQueueProgress(item, id, s) {
+    const stages = {
+        preparing: '准备素材', joining_video: '拼接视频', joining_audio: '拼接音频',
+        probing: '读取媒体时长', muxing: 'FFmpeg 封装', finalizing: '收尾', finished: '完成'
+    };
+    item.replaceChildren();
+    item.className = `q-item${s.status === 'error' ? ' q-error' : s.status === 'finished' ? ' q-finished' : ''}`;
+    const addText = (tag, text, className = '') => {
+        const element = document.createElement(tag);
+        element.className = className;
+        element.textContent = text;
+        item.appendChild(element);
+        return element;
+    };
+    addText('b', id, 'q-title');
+    const stage = stages[s.stage] || s.eta || '排队中';
+    addText('div', s.status === 'error' ? `失败 · ${stage}` : stage, 'q-stage');
+    if (s.stage) {
+        addText('div', `视频分段：${s.video_done || 0} / ${s.video_total || 0}`, 'q-detail');
+        const audio = s.has_audio === false ? '无音轨，跳过音频拼接' :
+            s.has_audio === true ? `音频分段：${s.audio_done || 0} / ${s.audio_total || 0}` : '音频分段：待检查';
+        addText('div', audio, 'q-detail');
+        if (['muxing', 'finalizing', 'finished'].includes(s.stage)) {
+            const duration = s.duration_seconds > 0 ? formatMediaTime(s.duration_seconds) : '总时长未知';
+            addText('div', `已处理媒体：${formatMediaTime(s.processed_seconds)} / ${duration}`, 'q-detail');
+            addText('div', `处理速度：${s.speed || '等待数据'}`, 'q-detail');
+        }
+    }
+    if (s.status === 'error') addText('div', s.eta || '导出失败，请查看日志', 'q-message');
+    if (s.cleanup_warning) addText('div', `临时文件清理警告：${s.cleanup_warning}`, 'q-message');
+    const percent = Math.max(0, Math.min(100, Number.isFinite(s.progress) ? s.progress : 0));
+    const indefinite = s.status === 'running' && s.progress_indeterminate;
+    addText('div', indefinite ? '整体进度：当前阶段处理中' : `整体进度（估算）：${percent}%`, 'q-detail');
+    const progress = document.createElement('progress');
+    progress.setAttribute('max', '100');
+    progress.setAttribute('aria-label', `${id} ${stage}`);
+    if (!indefinite) progress.setAttribute('value', String(percent));
+    item.appendChild(progress);
+}
+
 async function tick() {
     try {
         const res = await axios.get('/api/progress');
@@ -314,7 +362,7 @@ async function tick() {
                 existingItem.className = 'q-item';
                 qDiv.appendChild(existingItem);
             }
-            existingItem.innerHTML = `<b>${id}</b> | <span class="eta-text">${s.eta}</span><progress value="${s.progress}" max="100"></progress>`;
+            renderQueueProgress(existingItem, id, s);
         }
         if(activeCount > 0 && chart) {
             chart.data.labels = lbs;
