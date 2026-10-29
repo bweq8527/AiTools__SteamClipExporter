@@ -1,0 +1,54 @@
+# 模块与代码地图
+
+路径均相对项目根目录，链接可定位文件；优先在 IDE 搜索函数名。当前源码很小，未分出服务层或数据访问层，不应描述为已有这些架构层。
+
+| 文件 | 职责与关键入口 | 调用／依赖 |
+| --- | --- | --- |
+| [main.py](../main.py) | 桌面入口；`get_base_path()`、`start_flask()`；创建 WebView 并配置窗口对象 | 导入 `backend.app.app`，启动 Flask 线程、pywebview 主循环 |
+| [backend/app.py](../backend/app.py) | Flask、静态页面、全部业务路由、内存状态和后台 worker | 直接调用文件系统、WebView、worker 的媒体函数 |
+| [backend/worker.py](../backend/worker.py) | 媒体工具定位、分段拼接、缩略图和导出进度 | `subprocess` 调用项目内 FFmpeg、FFprobe |
+| [backend/__init__.py](../backend/__init__.py) | 空包入口 | 允许 `backend.app` 导入 |
+| [frontend/index.html](../frontend/index.html) | 页面结构、按钮事件、日志面板、图表、视频弹层 | CDN Axios／Chart.js，本地 CSS／JS |
+| [frontend/script.js](../frontend/script.js) | 路径操作、选择、分组渲染、队列提交、轮询和播放 | Axios 调 Flask，Chart.js 画图，HTML video 播放流 |
+| [frontend/style.css](../frontend/style.css) | 深色布局、素材卡片、游戏专辑、日志与播放器样式 | HTML 类名，含固定侧栏和最小网格宽度 |
+| [build.py](../build.py) | PyInstaller 打包及清理中间产物 | 依赖根目录资源和 pywebview／Flask 包 |
+| [run_server.bat](../run_server.bat) | 检查 Python／PATH FFmpeg，尝试安装部分依赖，启动 Flask CLI | 有安装副作用；与实际依赖／工具定位不完全一致 |
+| [README.md](../README.md) | 原始用途与三种使用方式 | 保留原信息，差异见架构与已知问题 |
+| `bin/`、`app_icon.ico` | 媒体可执行文件／压缩包、桌面图标 | exe 是否随版本保存见交接；不执行未知二进制进行文档核对 |
+| `backend/__pycache__/`、`.idea/` | Python 缓存、IDE 配置 | 部分已纳入 Git，非业务源码；本轮不清理 |
+
+## 后端关键函数与状态
+
+- `app.py:get_res_path()`：源码／打包资源定位。
+- `add_py_log()`：保留最近 100 条 Python 日志。
+- `worker_thread()`：导入模块时启动，取队列、置 `running`、调用 `convert_clip()`、写日志、`task_done()`；单个串行 worker。
+- `index()`、`select_folder()`、`open_folder()`：首页和桌面／资源管理器能力。
+- `set_p()`：设置素材与导出目录；`list_c()`：扫描目录、解析时间和游戏名、按需生成缩略图、判断输出存在。
+- `get_thumb()`：读取 JPG；`stream_clip()` 及内部 `generate()`：短预览临时拼接和 FFmpeg stdout 流。
+- `add_q()`：按数组顺序入队，跳过已 `pending/running` 的同 cid；`get_prog()`：状态及日志快照。
+- `worker.py:get_ffmpeg_tool()`、`get_hide_config()`：定位 exe 和 Windows 子进程隐藏窗口配置。
+- `get_video_duration()`：FFprobe 查询时长，失败回退 0。
+- `generate_quick_thumb()`：init 加首段生成 JPG，最后清理缩略临时文件。
+- `convert_clip()`：视频／音频拼接，执行 FFmpeg 流复制，解析进度，清理 `.v/.a`。
+
+## 前端关键入口
+
+- 初始化：`DOMContentLoaded → initChart()`，此时不自动扫描。
+- 路径：`browse()`、`openExportDir()`、`setP()`；后者成功后 `load(true)` 并首次启动 1 秒 `tick()` 定时器。
+- 列表：`load()` 请求数据，`toggleView()` 切换平铺／分类；`renderList()` 按 `viewMode/currentAlbum` 渲染；`createClipEl()` 绑定预览和底部选择；`selectAll()` 操作 `sel`。
+- 队列：`addQ()` 提交 `sel` 后清空选择；`tick()` 更新任务卡、图表及三类日志，完成后触发 `load()`。
+- 播放：`openPlayer()`、`closePlayer()`；悬停 800ms 创建静音循环 video，均使用 `/api/stream/<cid>`。
+- 日志和时间：`log()`、`getFormattedTime()`、`formatDate()`；不要把前端时间戳误认为后端持久日志。
+
+## 按功能定位修改入口
+
+| 目标 | 先读／主要修改入口 | 必须评估的相邻影响 |
+| --- | --- | --- |
+| 扫描、目录识别、游戏名、时间 | `set_p()`、`list_c()`、`load()`、`renderList()` | API 字段、缩略写入、导出标记、排序 |
+| 选择顺序、全选、分组 UI | `selectAll()`、`createClipEl()`、`addQ()` | `sel` 与显示排序差异、后端去重和串行顺序 |
+| 导出正确性、进度、失败状态 | `convert_clip()`、`get_video_duration()`、`worker_thread()`、`tick()` | 临时文件、退出码、重排队、输出存在判定 |
+| 缩略或播放器 | `generate_quick_thumb()`、`stream_clip()`、`openPlayer()`、`createClipEl()` | 媒体兼容、进程清理、并发、仅前 10 段 |
+| 启动、工具路径、打包 | `main.py`、`get_res_path()`、`get_ffmpeg_tool()`、`build.py`、bat | 根目录启动、PyInstaller 资源、浏览器／桌面差异 |
+| 记忆／交接 | 根入口及 INDEX 指定的主要维护文档 | 不把文档工作扩大为业务修复 |
+
+新增功能前按需求与开发规范确认方案；本表只提供定位，不代表修改授权。
