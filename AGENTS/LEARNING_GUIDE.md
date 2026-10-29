@@ -39,7 +39,13 @@
 2. 查看 UI 的 FRONTEND／FFMPEG／后端日志，浏览器 DevTools Network 检查请求、响应和次数；有需要再在 IDE 对 `set_p()`、`add_q()`、`convert_clip()` 设断点。
 3. 从最小调用链判断是界面未刷新、通信失败、状态错误还是媒体工具失败；参照已知问题的“静态证据／待复现”分类。
 4. 单独确认进程返回码与输出文件可播放性，不只看进度 100。关注音轨、时长、错误和临时文件。
-5. 清楚记录验证等级：语法检查、隔离逻辑测试、真实素材集成、桌面交互、EXE 构建互不替代。本轮仅静态核对，未运行这些业务场景。
+5. 清楚记录验证等级：语法检查、隔离逻辑测试、真实素材集成、桌面交互、EXE 构建互不替代。本次已加入隔离 API／前端行为及合成媒体回归，尚未做真实素材试听或桌面验收。
+
+本次修复可对照两个知识点：输入框值属于前端状态，后端只有收到 HTTP 请求才更改配置；`submitPaths()` 用 Promise 排队，`addQ()` 等待目录校验。媒体方面，PTS 表示每个包的展示时间，两轨分别归零会改变相对起点；`convert_clip()` 保留源时间戳并在输出端共同平移。`tests/test_export.py` 比较每个包的时间关系及解码结果，比只断言“MP4 存在”更能发现同步错误。
+
+在项目根目录运行 `python -B -m unittest discover -s tests -v` 和 `node --test tests/frontend.test.js`；媒体回归需要已有 `bin/ffmpeg.exe` 与 `bin/ffprobe.exe`，缺少时明确跳过。这两组测试不替代真实录像试听。
+
+预览清理可对照 `stream_clip()` 与 `tests/test_preview.py`：`terminate()` 发起终止不等于进程已退出，Windows 文件锁需等 `wait()` 确认退出后释放；`finally` 应从资源创建开始覆盖，部分创建失败也要清理，并保留原始异常。
 
 ## GitKraken 学习路线
 

@@ -14,7 +14,7 @@
 | 媒体处理 | 外部 `ffmpeg.exe`、`ffprobe.exe` | `subprocess` 调用，项目 `bin/` 或打包资源目录定位 |
 | 打包 | PyInstaller | `build.py` 构建单文件窗口应用并打包前后端、bin、图标 |
 
-未发现 `requirements.txt`、`pyproject.toml`、依赖锁文件、自动化测试或 CI。支持的最低 Python 和依赖版本未声明；已有 `.cpython-312.pyc` 不是兼容性声明。本轮可用解释器为 Python 3.12.2，仅代表核对环境。
+未发现 `requirements.txt`、`pyproject.toml`、依赖锁文件或 CI。`tests/` 新增标准库 unittest 和 Node 内置行为测试，媒体回归依赖本地 bin 工具；不需要安装测试框架。支持的最低 Python 和依赖版本未声明；已有 `.cpython-312.pyc` 不是兼容性声明。初始化核对使用 Python 3.12.2，不代表最低要求。
 
 ```mermaid
 flowchart LR
@@ -47,7 +47,7 @@ flowchart LR
 
 - `get_res_path()` 以 `sys._MEIPASS` 或 `backend/app.py` 的父级项目目录定位前端资源。
 - `get_ffmpeg_tool()` 以 `sys._MEIPASS` 或**当前工作目录**定位 `bin/<name>`；`main.py` 的图标定位和 `build.py` 也依赖工作目录。因此源码运行应从根目录启动，不能只依赖系统 PATH。
-- 输入素材路径、导出路径由 `/api/set_path` 设置；没有配置文件、环境变量配置层或数据库。bat 的 `FLASK_APP` 仅用于选 Flask 应用。
+- 输入素材路径、导出路径由 `/api/set_path` 设置；新增 `/api/set_export_path` 独立更改导出目录。前端路径提交串行，入队前再次等待导出目录校验。没有配置文件、环境变量配置层或数据库。bat 的 `FLASK_APP` 仅用于选 Flask 应用。
 - `CURRENT_CLIP_PATH`、`EXPORT_PATH`、`CONVERSION_STATUS`、`CONVERSION_QUEUE`、`PYTHON_LOGS` 全部为单进程内存；重启丢失，不应配置多进程并假定共享状态。
 - 持久数据是原素材、`gamename.txt`、素材库根目录的 `<cid>.jpg`、导出目录的 `<cid>.mp4`。导出临时 `.v`、`.a` 位于输出旁；预览临时 MP4 位于系统临时目录；缩略临时文件为 `<cid>.jpg.tmp.mp4`。
 
@@ -70,6 +70,6 @@ flowchart LR
 
 这里是代码期待的格式，不是全部 Steam 格式规范；目录中第二字段被代码用作 `AppID` 展示，不应误写为已验证的用户 SteamID。
 
-导出拼接 init 与 chunks 后调用 FFmpeg `-c copy`，有 stream1 时附加音频输入；无用户可选编码和格式配置。预览单独走 stream0 前 10 段的 H.264 流式转换，不等同完整导出，也没有 Range／定位处理。缺片段、多个 `fg_*`、损坏数据和输出覆盖等风险统一见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+导出拼接 init 与 chunks 后调用 FFmpeg `-c copy`，有 stream1 时在音频输入前使用 `-isync 0` 以视频输入起点为参考，保留两路相对偏移；输出端 `-avoid_negative_ts make_zero` 对所有轨道统一平移。合成分段已验证音频早／晚、B 帧、大时间戳、无音轨及进度；真实 Steam 素材仍待验收。本地 FFmpeg 8.0.1 支持该参数，替换旧工具时需核实。无用户可选编码和格式配置。预览单独走 stream0 前 10 段的 H.264 流式转换，不等同完整导出，也没有 Range／定位处理。缺片段、多个 `fg_*`、损坏数据和输出覆盖等风险统一见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
 
 现有 README 声称添加 FFmpeg 至 PATH，但当前代码直接调用 `bin/` 中的 exe，且 bat 的依赖安装不完整。本轮保留原文，通过本文件说明差异；未来变更需独立授权。

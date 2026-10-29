@@ -1,6 +1,6 @@
 # 数据流与运行流程
 
-依据当前实现；未运行真实素材。接口字段以 [API.md](API.md) 为准，故障与限制见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
+依据当前实现；已运行隔离合成分段及 test client，未运行真实 Steam 素材。接口字段以 [API.md](API.md) 为准，故障与限制见 [KNOWN_ISSUES.md](KNOWN_ISSUES.md)。
 
 ## 1．配置路径、扫描并展示
 
@@ -27,7 +27,7 @@ sequenceDiagram
     UI->>UI: 首次设置路径后开启 1 秒 tick()
 ```
 
-`setP()` 不 await `load(true)`；扫描与轮询可能交错。列表接口在 HTTP 请求线程内同步生成缩略图，不是由转换队列生成。选择导出路径本身不会更新后端，需要再次点击扫描提交两项路径。
+`setP()` 不 await `load(true)`；扫描与轮询可能交错。列表接口在 HTTP 请求线程内同步生成缩略图，不是由转换队列生成。导出选择器成功或手填 `change` → `setExportPath()` → `POST /api/set_export_path`，独立设置后端导出目录，再 `load(true)` 刷新标记、清除已导出／消失项的选择；无需重新点击扫描。`submitPaths()` 把路径设置及其刷新／入队回调作为完整串行操作。
 
 ## 2．选择、排队、导出、显示进度
 
@@ -43,6 +43,9 @@ sequenceDiagram
     U->>UI: 点击卡片底部或全选未导出
     UI->>UI: 更新有序 sel 数组
     U->>UI: 批量转换所选素材
+    UI->>API: POST /api/set_export_path，等待配置成功
+    API-->>UI: success / 400，无效则停止入队
+    UI->>API: GET /api/clips，刷新标记并过滤选择，失败停止入队
     UI->>API: POST /api/queue，clip_ids = sel
     API->>API: 跳过 pending/running，设置 pending
     API->>Q: 写入素材路径、输出路径、cid
@@ -52,7 +55,7 @@ sequenceDiagram
     W->>W: 标记 running
     W->>FS: 拼接 stream0 到 .v，可选 stream1 到 .a
     W->>FF: FFprobe 获取视频时长
-    W->>FF: FFmpeg -c copy 输出 MP4并输出进度
+    W->>FF: 音频输入 -isync 0，-c copy，输出端 make_zero 统一平移，输出 MP4及进度
     FF-->>W: out_time_ms 等输出行
     W->>W: 更新共享 progress / eta / last_raw_log
     loop 每秒
@@ -74,7 +77,7 @@ sequenceDiagram
 
 用户悬停素材图片 800ms → `createClipEl()` 创建静音循环 video，或点击图片 → `openPlayer()` 打开弹层 → video 请求 `/api/stream/<cid>` → `stream_clip()` 找第一个 `video/fg_*` → 在系统临时 MP4 拼接 stream0 init 与前 10 个 chunk → 启动 FFmpeg H.264 分片 MP4 输出到 stdout → Flask `Response` 流 → video 播放。
 
-离开悬停会清空预览容器；关闭弹层时 `closePlayer()` 暂停、移除 src 并 `load()`，服务端生成器退出时在 `finally` 终止进程并删除临时文件。创建临时文件／子进程阶段的异常并未完全纳入该 `finally`，不能保证所有失败路径都清理，见 `KI-008`。预览未读取 stream1，也不是对已导出的 MP4 做播放。
+离开悬停会清空预览容器；关闭弹层时 `closePlayer()` 暂停、移除 src 并 `load()`。服务端从创建临时文件起进入 try/finally：正常结束、断开或拼接／启动失败均进入清理。若进程仍运行，先 terminate；wait 最多 3 秒，超时后 kill 并再次 wait 最多 3 秒；关闭 stdout 后才删除本请求临时文件，防止 Windows 输入文件锁尚未释放。清理失败记 warning，不遮蔽原错误；外部占用或应用被强杀仍可能残留，见 `KI-008`。预览未读取 stream1，也不是对已导出的 MP4 做播放。
 
 ## 数据生命周期
 

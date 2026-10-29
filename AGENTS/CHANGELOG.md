@@ -8,9 +8,23 @@
 - 涉及模块：仅 `AGENTS.md` 和 `AGENTS/` 内 Markdown。
 - 影响：支持按需恢复项目上下文，明确用户意图与实现／风险边界；应用行为未变。
 - 关联任务：[记忆初始化](TASKS/COMPLETED/2026-10-29-project-memory-bootstrap.md)。
-- Git commit：尚未提交，由用户在 GitKraken 手动管理；文档以此前 HEAD 为代码基线。
+- Git commit：后续用户已保存于 `b70cbc4d3d22f619c836bb30eadeb318c4267454`（“架构 改进”），同时纳入两个本地 exe；不把保存动作归于 AI。
 
-## 2026-01-04：本地 HEAD“功能改进”
+## 2026-10-29：导出目录生效与音画时间轴修复
+
+- 内容：导出选择／手填更改独立提交，配置、刷新及入队串行；清除新目录已有输出项的选择，保留已排队目标。音频以视频起点为参考再统一平移，修复两输入分别归零造成的音画偏移，保持流复制及进度；分段及 stdout 句柄明确关闭。
+- 涉及：`backend/app.py`、`backend/worker.py`、`frontend/script.js`、`frontend/index.html`，新增 `tests/` 回归。
+- 验证：Python 7/7、Node 7/7，合成分段逐包 PTS／解码／进度及前端语法通过；真实 Steam 素材、桌面和 EXE 尚未验收。
+- 关联：REQ-FIX-001／002，KI-011／012，[任务记录](TASKS/COMPLETED/2026-10-29-export-path-and-sync.md)。在工作区交付，由用户手动管理 Git。
+
+## 2026-10-29：预览文件锁清理与目录选择警告修复
+
+- 用户报告预览关闭时 Windows 文件占用错误与 pywebview 弃用警告；修复 `backend/app.py`，新增 `tests/test_preview.py`。
+- 预览从创建资源起保护，终止／等待退出后关闭管道并删除本请求临时文件；终止超时后 kill 再等待，其他占用导致的删除失败仅记警告。现代目录选择使用 `FileDialog.FOLDER`，保留旧版本分支。
+- 验证：Python 16/16、Node 7/7；真实 FFmpeg 3 次提前关闭和 1 次完整预览解码均退出进程并清理文件；未自动操作原生目录窗口。
+- 关联：REQ-FIX-003／004、KI-008／013，[任务记录](TASKS/COMPLETED/2026-10-29-preview-cleanup.md)。无依赖安装、升级、Git 写操作或遗留临时文件批量清理。
+
+## 2026-01-04：“功能改进”
 
 - commit：`3e930fc9d4544ad1def95f008ee41af551ee992f`；Git 提交时间 `2026-01-04T01:00:35+08:00`。
 - 证据：本轮读取 `git show --stat` 和相对父提交的源码 diff。

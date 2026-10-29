@@ -1,6 +1,6 @@
 # 活动任务目录说明
 
-当前无已批准且未完成的业务开发任务；本轮记忆初始化完成档案位于 [COMPLETED](../COMPLETED/2026-10-29-project-memory-bootstrap.md)。本 README 是目录说明，不是活动任务。
+当前无未完成代码任务；[导出目录与同步修复](../COMPLETED/2026-10-29-export-path-and-sync.md)及[预览清理与弃用警告修复](../COMPLETED/2026-10-29-preview-cleanup.md)已归档，真实素材／原生交互验收边界见档案。初始化历史见 [记忆初始化](../COMPLETED/2026-10-29-project-memory-bootstrap.md)。本 README 是目录说明，不是活动任务。
 
 重要任务开始时建立独立 `YYYY-MM-DD-主题.md`，至少写：任务目标、用户原始需求及后续确认、验收标准、实现方案、涉及文件、当前进度、测试结果、重要决策和完成状态。保留已确认内容与待确认问题的区别。
 

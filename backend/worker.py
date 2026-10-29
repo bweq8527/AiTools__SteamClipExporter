@@ -67,21 +67,26 @@ def convert_clip(folder, out, status):
     try:
         with open(tmp_v, 'wb') as f:
             with open(v_init, 'rb') as i: f.write(i.read())
-            for c in v_chks: f.write(open(c, 'rb').read())
+            for c in v_chks:
+                with open(c, 'rb') as chunk: f.write(chunk.read())
 
         has_a = False
         if os.path.exists(a_init):
             has_a = True
             with open(tmp_a, 'wb') as f:
                 with open(a_init, 'rb') as i: f.write(i.read())
-                for c in a_chks: f.write(open(c, 'rb').read())
+                for c in a_chks:
+                    with open(c, 'rb') as chunk: f.write(chunk.read())
 
         duration = get_video_duration(tmp_v)
         status['progress'] = 15
 
+        # 音频以视频的起始时间为参考，保留两路分段的相对偏移。
+        # 不直接 copyts：大源时间戳会使 FFmpeg 的进度时间保持为零。
         cmd = [ffmpeg, '-y', '-i', tmp_v]
-        if has_a: cmd += ['-i', tmp_a]
-        cmd += ['-c', 'copy', out, '-progress', 'pipe:1', '-nostats']
+        if has_a: cmd += ['-isync', '0', '-i', tmp_a]
+        # 在输出端统一平移所有轨道，去除长时间轴起点且保留相对时间。
+        cmd += ['-c', 'copy', '-avoid_negative_ts', 'make_zero', out, '-progress', 'pipe:1', '-nostats']
 
         process = subprocess.Popen(
             cmd, startupinfo=get_hide_config(),
@@ -89,16 +94,17 @@ def convert_clip(folder, out, status):
             universal_newlines=True, encoding='utf-8'
         )
 
-        for line in process.stdout:
-            status['last_raw_log'] = line.strip()
-            if 'out_time_ms' in line and duration > 0:
-                ms_match = re.search(r'out_time_ms=(\d+)', line)
-                if ms_match:
-                    curr_ms = int(ms_match.group(1))
-                    curr_sec = curr_ms / 1000000.0
-                    real_p = 15 + int((curr_sec / duration) * 84)
-                    status['progress'] = min(real_p, 99)
-                    status['eta'] = f"处理中: {int(curr_sec)}s / {int(duration)}s"
+        with process.stdout:
+            for line in process.stdout:
+                status['last_raw_log'] = line.strip()
+                if 'out_time_ms' in line and duration > 0:
+                    ms_match = re.search(r'out_time_ms=(\d+)', line)
+                    if ms_match:
+                        curr_ms = int(ms_match.group(1))
+                        curr_sec = curr_ms / 1000000.0
+                        real_p = 15 + int((curr_sec / duration) * 84)
+                        status['progress'] = min(real_p, 99)
+                        status['eta'] = f"处理中: {int(curr_sec)}s / {int(duration)}s"
 
         process.wait()
         status['progress'] = 100

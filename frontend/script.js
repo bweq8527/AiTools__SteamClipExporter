@@ -2,6 +2,35 @@ let sel = [], chart = null, pyIdx = 0;
 let allClips = [];
 let viewMode = 'flat';
 let currentAlbum = null;
+let pathUpdate = Promise.resolve();
+
+// 路径请求串行提交，避免选择器与入队操作交错后恢复旧配置。
+function submitPaths(url, data, afterSave = async () => {}) {
+    pathUpdate = pathUpdate.catch(() => {}).then(async () => {
+        const res = await axios.post(url, data);
+        await afterSave(res);
+        return res;
+    });
+    return pathUpdate;
+}
+
+async function setExportPath(refresh = true, afterSave = async () => {}) {
+    try {
+        await submitPaths('/api/set_export_path', {
+            export_path: document.getElementById('ep').value
+        }, async res => {
+            document.getElementById('msg').innerText = res.data.message;
+            if(refresh && !await load(true)) throw new Error('无法刷新素材列表，请重试');
+            await afterSave();
+        });
+        return true;
+    } catch(e) {
+        const message = e.response?.data?.message || e.message || '导出目录配置失败';
+        document.getElementById('msg').innerText = message;
+        log('l-front', 'ERROR', message, 'front-color');
+        return false;
+    }
+}
 
 function getFormattedTime() {
     const now = new Date();
@@ -76,6 +105,7 @@ async function browse(targetId) {
         if(res.data.success && res.data.path) {
             document.getElementById(targetId).value = res.data.path;
             log('l-front', 'EVENT', `用户选择了新路径: ${res.data.path}`, 'front-color');
+            if(targetId === 'ep') await setExportPath();
         }
     } catch (e) {}
 }
@@ -92,7 +122,7 @@ async function setP() {
     const epVal = document.getElementById('ep').value;
     log('l-front', 'API', `请求后端初始化库路径...`, 'front-color');
     try {
-        const res = await axios.post('/api/set_path', { path: pVal, export_path: epVal });
+        const res = await submitPaths('/api/set_path', { path: pVal, export_path: epVal });
         document.getElementById('msg').innerText = res.data.message;
         load(true);
         if(!window.timer) {
@@ -132,11 +162,15 @@ async function load(verbose = false) {
         const res = await axios.get('/api/clips');
         const oldLen = allClips.length;
         allClips = res.data.clips;
+        const available = new Set(allClips.filter(c => !c.is_converted).map(c => c.id));
+        sel = sel.filter(id => available.has(id));
+        document.getElementById('qBtn').disabled = sel.length === 0;
         if (verbose || oldLen !== allClips.length) {
             if(verbose) log('l-front', 'INFO', `扫描到 ${allClips.length} 个有效录像`, 'front-color');
             renderList();
         }
-    } catch (e) {}
+        return true;
+    } catch (e) { return false; }
 }
 
 function renderList() {
@@ -229,13 +263,18 @@ function createClipEl(c) {
     return el;
 }
 async function addQ() {
-    log('l-front', 'QUEUE', `将 ${sel.length} 项任务提交至转换引擎`, 'front-color');
-    try {
-        await axios.post('/api/queue', { clip_ids: sel });
-        sel = [];
-        document.getElementById('qBtn').disabled = true;
-        load();
-    } catch (e) {}
+    const requestedIds = [...sel];
+    // 配置、刷新和入队共用串行链，后续目录变更必须等此次队列提交结束。
+    await setExportPath(true, async () => {
+        const available = new Set(allClips.filter(c => !c.is_converted).map(c => c.id));
+        const ids = requestedIds.filter(id => available.has(id));
+        if(!ids.length) return;
+        log('l-front', 'QUEUE', `将 ${ids.length} 项任务提交至转换引擎`, 'front-color');
+        await axios.post('/api/queue', { clip_ids: ids });
+        sel = sel.filter(id => !ids.includes(id));
+        document.getElementById('qBtn').disabled = sel.length === 0;
+        renderList();
+    });
 }
 
 async function tick() {

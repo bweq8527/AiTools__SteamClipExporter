@@ -43,7 +43,7 @@
                     <button onclick="setP()">扫描素材库文件夹</button>
                 </div>
                 <div class="path-group">
-                    <input type="text" id="ep" placeholder="请选择或输入导出库路径（默认导出至素材库）...">
+                    <input type="text" id="ep" onchange="setExportPath()" placeholder="请选择或输入导出库路径（默认导出至素材库）...">
                     <button style="background:#454545" onclick="browse('ep')">选择导出目录</button>
                     <button style="background:#2e7d32" onclick="openExportDir()">打开导出库文件夹</button>
                 </div>

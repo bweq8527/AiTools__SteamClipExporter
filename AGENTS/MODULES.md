@@ -14,6 +14,8 @@
 | [build.py](../build.py) | PyInstaller 打包及清理中间产物 | 依赖根目录资源和 pywebview／Flask 包 |
 | [run_server.bat](../run_server.bat) | 检查 Python／PATH FFmpeg，尝试安装部分依赖，启动 Flask CLI | 有安装副作用；与实际依赖／工具定位不完全一致 |
 | [README.md](../README.md) | 原始用途与三种使用方式 | 保留原信息，差异见架构与已知问题 |
+| [tests/test_export.py](../tests/test_export.py)、[tests/frontend.test.js](../tests/frontend.test.js) | 导出路径 API／交互、FFmpeg 合成分段逐包时间轴回归 | Python unittest、Flask test client、Node 内置测试器；无新增测试框架 |
+| [tests/test_preview.py](../tests/test_preview.py) | 预览资源生命周期、Windows 文件锁及目录选择器弃用／兼容回归 | 模拟外部进程退出时序，真实文件句柄与 Flask Response 关闭 |
 | `bin/`、`app_icon.ico` | 媒体可执行文件／压缩包、桌面图标 | exe 是否随版本保存见交接；不执行未知二进制进行文档核对 |
 | `backend/__pycache__/`、`.idea/` | Python 缓存、IDE 配置 | 部分已纳入 Git，非业务源码；本轮不清理 |
 
@@ -23,20 +25,20 @@
 - `add_py_log()`：保留最近 100 条 Python 日志。
 - `worker_thread()`：导入模块时启动，取队列、置 `running`、调用 `convert_clip()`、写日志、`task_done()`；单个串行 worker。
 - `index()`、`select_folder()`、`open_folder()`：首页和桌面／资源管理器能力。
-- `set_p()`：设置素材与导出目录；`list_c()`：扫描目录、解析时间和游戏名、按需生成缩略图、判断输出存在。
-- `get_thumb()`：读取 JPG；`stream_clip()` 及内部 `generate()`：短预览临时拼接和 FFmpeg stdout 流。
+- `set_p()`：设置素材与导出目录；`set_export_path()`：独立更新导出目录并拒绝无效路径；`list_c()`：扫描目录、解析时间和游戏名、按需生成缩略图、判断输出存在。
+- `get_thumb()`：读取 JPG；`stream_clip()` 及内部 `generate()`：短预览拼接与 FFmpeg stdout 流，外层 finally 覆盖创建失败／断开清理，等待进程退出后关闭管道并删除临时文件。
 - `add_q()`：按数组顺序入队，跳过已 `pending/running` 的同 cid；`get_prog()`：状态及日志快照。
 - `worker.py:get_ffmpeg_tool()`、`get_hide_config()`：定位 exe 和 Windows 子进程隐藏窗口配置。
 - `get_video_duration()`：FFprobe 查询时长，失败回退 0。
 - `generate_quick_thumb()`：init 加首段生成 JPG，最后清理缩略临时文件。
-- `convert_clip()`：视频／音频拼接，执行 FFmpeg 流复制，解析进度，清理 `.v/.a`。
+- `convert_clip()`：视频／音频拼接，音频输入使用 `-isync 0` 以视频时间为参考，输出端 `-avoid_negative_ts make_zero` 统一平移，流复制，解析进度，清理 `.v/.a`。
 
 ## 前端关键入口
 
 - 初始化：`DOMContentLoaded → initChart()`，此时不自动扫描。
-- 路径：`browse()`、`openExportDir()`、`setP()`；后者成功后 `load(true)` 并首次启动 1 秒 `tick()` 定时器。
+- 路径：`browse()`、`openExportDir()`、`setP()`；`submitPaths()` 串行提交路径请求；`setExportPath()` 在导出选择／手填更改时独立提交并刷新标记；`setP()` 成功后 `load(true)` 并首次启动 1 秒 `tick()` 定时器。
 - 列表：`load()` 请求数据，`toggleView()` 切换平铺／分类；`renderList()` 按 `viewMode/currentAlbum` 渲染；`createClipEl()` 绑定预览和底部选择；`selectAll()` 操作 `sel`。
-- 队列：`addQ()` 提交 `sel` 后清空选择；`tick()` 更新任务卡、图表及三类日志，完成后触发 `load()`。
+- 队列：`addQ()` 捕获点击时的选择，将配置、列表刷新和有效选择入队作为同一串行操作；失败保留选择，成功移除已入队项。`load()` 会清除已导出／已消失的选择。`tick()` 更新任务卡、图表及三类日志，完成后触发 `load()`。
 - 播放：`openPlayer()`、`closePlayer()`；悬停 800ms 创建静音循环 video，均使用 `/api/stream/<cid>`。
 - 日志和时间：`log()`、`getFormattedTime()`、`formatDate()`；不要把前端时间戳误认为后端持久日志。
 

@@ -70,7 +70,9 @@ def index():
 def select_folder():
     window = app.config.get('WEBVIEW_WINDOW')
     if window:
-        result = window.create_file_dialog(webview.FOLDER_DIALOG)
+        dialog = getattr(webview, 'FileDialog', None)
+        folder_dialog = dialog.FOLDER if dialog is not None else webview.FOLDER_DIALOG
+        result = window.create_file_dialog(folder_dialog)
         if result and len(result) > 0:
             return jsonify({"success": True, "path": result[0]})
     return jsonify({"success": False, "path": ""})
@@ -107,31 +109,54 @@ def stream_clip(cid):
 
     def generate():
         ffmpeg = get_ffmpeg_tool('ffmpeg.exe')
-
-        # 创建临时合并文件：M4S 是分段 MP4，直接二进制合并 init + chunks 即可被 ffmpeg 识别
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
-            with open(init_file, 'rb') as f: tmp.write(f.read())
-            for chk in chunks[:10]:  # 预览仅取前10个分段以提速
-                with open(chk, 'rb') as f: tmp.write(f.read())
-            tmp_path = tmp.name
-
-        # 使用 ffmpeg 转换为浏览器友好的 mp4 流 (faststart)
-        cmd = [
-            ffmpeg, '-i', tmp_path,
-            '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
-            '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
-            'pipe:1'
-        ]
-
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, startupinfo=get_hide_config())
+        tmp_path = None
+        proc = None
         try:
+            # 从创建临时文件开始保护，拼接或启动进程失败也需要清理。
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
+                tmp_path = tmp.name
+                with open(init_file, 'rb') as f: tmp.write(f.read())
+                for chk in chunks[:10]:  # 预览仅取前10个分段以提速
+                    with open(chk, 'rb') as f: tmp.write(f.read())
+
+            cmd = [
+                ffmpeg, '-i', tmp_path,
+                '-c:v', 'libx264', '-preset', 'ultrafast', '-tune', 'zerolatency',
+                '-f', 'mp4', '-movflags', 'frag_keyframe+empty_moov+default_base_moof',
+                'pipe:1'
+            ]
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, startupinfo=get_hide_config())
             while True:
                 data = proc.stdout.read(1024 * 128)
                 if not data: break
                 yield data
         finally:
-            proc.terminate()
-            if os.path.exists(tmp_path): os.remove(tmp_path)
+            if proc is not None:
+                try:
+                    # terminate() 只发起终止；Windows 需等退出后才释放输入文件。
+                    if proc.poll() is None:
+                        proc.terminate()
+                    try:
+                        proc.wait(timeout=3)
+                    except subprocess.TimeoutExpired:
+                        proc.kill()
+                        proc.wait(timeout=3)
+                except (OSError, subprocess.TimeoutExpired) as e:
+                    app.logger.warning("预览进程清理失败: %s", e)
+                finally:
+                    if proc.stdout is not None:
+                        try:
+                            proc.stdout.close()
+                        except OSError as e:
+                            app.logger.warning("预览管道关闭失败: %s", e)
+            if tmp_path is not None:
+                try:
+                    os.remove(tmp_path)
+                except FileNotFoundError:
+                    pass
+                except OSError as e:
+                    # 外部占用仍可能阻止删除，不让清理异常逃出关闭中的生成器。
+                    app.logger.warning("预览临时文件清理失败: %s", e)
 
     return Response(generate(), mimetype='video/mp4')
 
@@ -148,6 +173,19 @@ def set_p():
         add_py_log(f"配置就绪 | 素材: {CURRENT_CLIP_PATH} | 导出: {EXPORT_PATH}")
         return jsonify({"success": True, "message": "目录配置成功"})
     return jsonify({"success": False, "message": "无效的素材路径"}), 400
+
+
+@app.route('/api/set_export_path', methods=['POST'])
+def set_export_path():
+    global EXPORT_PATH
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('export_path', ''), str):
+        return jsonify({"success": False, "message": "无效的导出路径"}), 400
+    path = data.get('export_path', '').strip()
+    if path and not os.path.isdir(path):
+        return jsonify({"success": False, "message": "无效的导出路径"}), 400
+    EXPORT_PATH = path or CURRENT_CLIP_PATH
+    return jsonify({"success": True, "message": "导出目录配置成功", "export_path": EXPORT_PATH})
 
 
 @app.route('/api/clips', methods=['GET'])
