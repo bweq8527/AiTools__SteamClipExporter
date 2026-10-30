@@ -1,4 +1,4 @@
-let sel = [], chart = null, pyIdx = 0;
+let sel = [], chart = null, speedChart = null, pyIdx = 0;
 let allClips = [];
 let viewMode = 'flat';
 let currentAlbum = null;
@@ -6,8 +6,8 @@ let pathUpdate = Promise.resolve();
 let monitorStatuses = {}, selectedTaskId = null, selectedMonitorPhase = null;
 let followRunningTask = true, lastMonitorKey = '';
 const monitorPhases = {
-    joining_video: { label: '拼接视频文件', bar: '#2798f5', line: '#8caec9', unit: 'MB/s' },
-    joining_audio: { label: '拼接音频文件', bar: '#27c178', line: '#91b5a4', unit: 'MB/s' },
+    joining_video: { label: '拼接视频文件', bar: '#2798f5', line: '#8caec9', unit: '个/s' },
+    joining_audio: { label: '拼接音频文件', bar: '#27c178', line: '#91b5a4', unit: '个/s' },
     muxing: { label: '封装媒体文件', bar: '#f29432', line: '#c6ad91', unit: 'x' }
 };
 
@@ -65,24 +65,101 @@ function formatDate(ts) {
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// 固定像素柱宽需要等时间重采样，不能再把每个原始 dt 直接画成不同宽的柱。
+function getMonitorSeries(history, capacity, focusedPhase = null) {
+    let elapsed = 0;
+    const phases = Object.keys(monitorPhases).map(phase => {
+        const start = elapsed;
+        const points = (history[phase] || []).filter(point => Number.isFinite(point.dt) && point.dt > 0).map(point => {
+            const begin = elapsed;
+            elapsed += point.dt;
+            return { ...point, start: begin, end: elapsed };
+        });
+        return { phase, start, end: elapsed, points };
+    });
+    const focus = phases.find(item => item.phase === focusedPhase && item.points.length);
+    const viewStart = focus ? focus.start : 0;
+    const viewEnd = focus ? focus.end : elapsed;
+    const series = {};
+    for (const { phase, start, end, points } of phases) {
+        series[phase] = [];
+        if (!points.length || (focus && phase !== focus.phase)) continue;
+        const count = Math.max(1, Math.round(capacity * (end - start) / (viewEnd - viewStart)));
+        for (let index = 0; index < count; index++) {
+            const begin = start + (end - start) * index / count;
+            const finish = start + (end - start) * (index + 1) / count;
+            const bin = { x: (begin + finish) / 2, start: begin, end: finish };
+            for (const metric of ['write_mbps', 'speed']) {
+                let weighted = 0, known = 0, unknown = false;
+                for (const point of points) {
+                    const overlap = Math.min(finish, point.end) - Math.max(begin, point.start);
+                    if (overlap <= 0) continue;
+                    if (Number.isFinite(point[metric])) {
+                        weighted += point[metric] * overlap;
+                        known += overlap;
+                    } else unknown = true;
+                }
+                bin[metric] = !unknown && known > 0 ? weighted / known : null;
+            }
+            series[phase].push(bin);
+        }
+    }
+    return { series, elapsed, viewStart, viewEnd };
+}
+
 function initChart() {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const fixedAxisWidth = axis => { axis.width = 48; };
+    const metricTick = value => Number(value) === 0 ? '' : Number(value).toLocaleString('zh-CN', { maximumFractionDigits: 1 });
+    const tooltip = {
+        filter: item => Number.isFinite(item.raw?.y),
+        callbacks: {
+            title: items => items.length ? `处理时间 ${items[0].raw.start.toFixed(1)}–${items[0].raw.end.toFixed(1)} 秒` : '',
+            label: item => `${item.dataset.label}: ${item.raw.y.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`
+        }
+    };
+    const baseOptions = () => ({
+        responsive: true, maintainAspectRatio: false,
+        layout: { autoPadding: false, padding: { top: 0, bottom: 0 } },
+        animation: reducedMotion ? false : { duration: 180, easing: 'linear' },
+        animations: reducedMotion ? {} : { x: { duration: 0 }, colors: { duration: 140 } },
+        interaction: { mode: 'nearest', axis: 'x', intersect: false },
+        plugins: { legend: { display: false }, tooltip },
+        onResize: () => {
+            lastMonitorKey = '';
+            requestAnimationFrame(() => refreshTaskMonitor());
+        }
+    });
+    const timeAxis = () => ({
+        type: 'linear', offset: false, min: 0, max: 1,
+        border: { color: '#777' }, grid: { display: false, drawTicks: false },
+        ticks: { display: false }
+    });
     chart = new Chart(document.getElementById('chart'), {
         type: 'bar',
-        data: { labels: [], datasets: [
-            { type: 'bar', label: '磁盘读写 MB/s', data: [], yAxisID: 'disk', backgroundColor: '#2798f5', borderRadius: 2, order: 2 },
-            { type: 'line', label: '封装速度 MB/s', data: [], yAxisID: 'speed', borderColor: '#8caec9', borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, cubicInterpolationMode: 'monotone', spanGaps: false, order: 1 }
-        ] },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            animation: { duration: 450, easing: 'easeOutQuart' },
-            interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { display: false }, tooltip: { filter: item => item.raw !== null } },
-            scales: {
-                x: { grid: { display: false }, ticks: { color: '#738494', maxTicksLimit: 4, maxRotation: 0, autoSkip: true } },
-                disk: { position: 'left', beginAtZero: true, suggestedMax: 1, title: { display: true, text: '磁盘 MB/s', color: '#8c9eae' }, grid: { color: '#253240' }, ticks: { color: '#738494', maxTicksLimit: 4 } },
-                speed: { position: 'right', beginAtZero: true, suggestedMax: 1, title: { display: true, text: '速度 MB/s', color: '#8c9eae' }, grid: { drawOnChartArea: false }, ticks: { color: '#738494', maxTicksLimit: 4 } }
-            }
-        }
+        data: { datasets: Object.entries(monitorPhases).map(([phase, config]) => ({
+            phase, label: `${config.label} · 写入 MB/s`, data: [], yAxisID: 'disk',
+            backgroundColor: config.bar, grouped: false, barThickness: 3, maxBarThickness: 3,
+            borderWidth: 0, borderRadius: 0, borderSkipped: false, inflateAmount: 0
+        })) },
+        options: { ...baseOptions(), scales: {
+            x: timeAxis(),
+            disk: { position: 'left', beginAtZero: true, suggestedMax: 1, afterFit: fixedAxisWidth, grid: { color: '#383838' }, ticks: { color: '#aaa', maxTicksLimit: 4, font: { size: 10 }, callback: metricTick } },
+            spacer: { position: 'right', min: 0, max: 1, afterFit: fixedAxisWidth, border: { display: false }, grid: { display: false }, ticks: { display: false } }
+        } }
+    });
+    speedChart = new Chart(document.getElementById('speed-chart'), {
+        type: 'line',
+        data: { datasets: Object.entries(monitorPhases).map(([phase, config]) => ({
+            phase, label: `${config.label} · ${config.unit}`, data: [],
+            yAxisID: phase === 'muxing' ? 'mux' : 'chunks', borderColor: config.line,
+            borderWidth: 2, pointRadius: 0, pointHoverRadius: 3, tension: 0, spanGaps: false
+        })) },
+        options: { ...baseOptions(), scales: {
+            x: { ...timeAxis(), display: false },
+            chunks: { position: 'left', reverse: true, beginAtZero: true, suggestedMax: 1, afterFit: fixedAxisWidth, grid: { color: '#383838' }, ticks: { color: '#91b5a4', maxTicksLimit: 3, font: { size: 10 }, callback: metricTick } },
+            mux: { position: 'right', reverse: true, beginAtZero: true, suggestedMax: 1, afterFit: fixedAxisWidth, grid: { drawOnChartArea: false }, ticks: { color: '#c6ad91', maxTicksLimit: 3, font: { size: 10 }, callback: metricTick } }
+        } }
     });
     document.getElementById('monitor-follow').onclick = () => {
         followRunningTask = true;
@@ -95,7 +172,11 @@ function initChart() {
         button.textContent = config.label;
         button.dataset.phase = phase;
         button.style.setProperty('--phase-color', config.bar);
-        button.onclick = () => { selectedMonitorPhase = phase; refreshTaskMonitor(); };
+        button.title = '放大查看此阶段，再次点击返回完整图表';
+        button.onclick = () => {
+            selectedMonitorPhase = selectedMonitorPhase === phase ? null : phase;
+            refreshTaskMonitor();
+        };
         document.getElementById('monitor-phases').appendChild(button);
     }
     refreshTaskMonitor();
@@ -110,7 +191,7 @@ function selectMonitorTask(id) {
 }
 
 function refreshTaskMonitor() {
-    if (!chart) return;
+    if (!chart || !speedChart) return;
     const ids = Object.keys(monitorStatuses);
     const previousTaskId = selectedTaskId;
     if (followRunningTask || !monitorStatuses[selectedTaskId]) {
@@ -119,51 +200,64 @@ function refreshTaskMonitor() {
     if (previousTaskId !== selectedTaskId) selectedMonitorPhase = null;
     const s = monitorStatuses[selectedTaskId];
     const history = s?.performance_history || {};
+    if (selectedMonitorPhase && !history[selectedMonitorPhase]?.length) selectedMonitorPhase = null;
     const available = Object.keys(monitorPhases).filter(phase => history[phase]?.length);
     const currentPhase = monitorPhases[s?.stage] ? s.stage : available.at(-1) || 'joining_video';
     const phase = selectedMonitorPhase || currentPhase;
     const config = monitorPhases[phase];
-    const points = history[phase] || [];
-    const last = points.at(-1);
+    const last = history[phase]?.at(-1);
     const live = s?.status === 'running' && s.stage === phase;
     const formatRate = value => Number.isFinite(value) ? value.toLocaleString('zh-CN', { maximumFractionDigits: 1 }) : '—';
     document.getElementById('monitor-task').textContent = selectedTaskId || '等待导出任务';
     document.getElementById('monitor-state').textContent = !s ? '点击下方任务查看数据' :
-        s.stage === 'probing' ? '读取媒体时长 · 暂停采样' :
-        s.status === 'finished' ? '导出成功 · 查看阶段记录' :
+        selectedMonitorPhase ? `${config.label} · 阶段放大${live ? ' · 实时' : ''}` :
+        s.stage === 'probing' ? '读取媒体时长 · 图表省略等待' :
+        s.status === 'finished' ? '导出成功 · 完整处理图表' :
         s.status === 'error' ? '导出失败 · 保留已有数据' : `${config.label}${live ? ' · 实时' : ' · 阶段记录'}`;
-    document.getElementById('monitor-disk').textContent = `${formatRate(last?.disk_mbps)} MB/s`;
+    document.getElementById('monitor-disk').textContent = `${formatRate(last?.write_mbps)} MB/s`;
+    document.getElementById('monitor-speed-label').textContent = phase === 'muxing' ? '封装倍速' : phase === 'joining_video' ? '视频片段处理速度' : '音频片段处理速度';
     document.getElementById('monitor-speed').textContent = `${formatRate(last?.speed)} ${config.unit}`;
     document.getElementById('monitor-time').textContent = formatMediaTime(s?.elapsed_seconds);
-    document.getElementById('monitor-empty').hidden = points.length > 0;
-    document.getElementById('monitor-empty').textContent = s?.stage === 'probing' ? '读取媒体时长期间不绘制曲线' : '该阶段暂无采样数据';
+    document.getElementById('monitor-empty').hidden = available.length > 0;
+    document.getElementById('monitor-empty').textContent = '等待任务采样数据';
     document.getElementById('monitor-panel').style.setProperty('--monitor-color', config.bar);
     document.getElementById('monitor-panel').classList.toggle('is-live', live);
     document.getElementById('monitor-follow').classList.toggle('active', followRunningTask);
     document.querySelectorAll('#monitor-phases button').forEach(button => {
-        button.classList.toggle('active', button.dataset.phase === phase);
-        button.setAttribute('aria-pressed', String(button.dataset.phase === phase));
+        const active = button.dataset.phase === selectedMonitorPhase;
+        button.classList.toggle('active', active);
+        button.disabled = !history[button.dataset.phase]?.length;
+        button.setAttribute('aria-pressed', String(active));
     });
     document.querySelectorAll('.q-item').forEach(item => {
         const active = item.id === `q-${selectedTaskId}`;
         item.classList.toggle('q-selected', active);
         item.setAttribute('aria-pressed', String(active));
     });
-    const key = `${selectedTaskId}:${phase}:${points.length}:${last?.t}`;
+    const capacity = Math.max(3, Math.min(240, Math.floor((document.getElementById('chart').clientWidth - 96) / 5)));
+    const key = `${selectedTaskId}:${selectedMonitorPhase}:${capacity}:` + Object.keys(monitorPhases).map(name => `${history[name]?.length}:${history[name]?.at(-1)?.t}`).join(':');
     if (key === lastMonitorKey) return;
-    const changedView = !lastMonitorKey.startsWith(`${selectedTaskId}:${phase}:`);
+    const changedTask = !lastMonitorKey.startsWith(`${selectedTaskId}:`);
     lastMonitorKey = key;
-    // 固定窗口从右侧填充；只使用真实采样，空位保持空白。
-    const padding = Array(Math.max(0, 120 - points.length)).fill(null);
-    chart.data.labels = [...padding.map(() => ''), ...points.map(point => formatMediaTime(point.t))];
-    chart.data.datasets[0].data = [...padding, ...points.map(point => point.disk_mbps)];
-    chart.data.datasets[0].backgroundColor = config.bar;
-    chart.data.datasets[1].data = [...padding, ...points.map(point => point.speed)];
-    chart.data.datasets[1].borderColor = config.line;
-    chart.data.datasets[1].pointRadius = points.length === 1 ? 2 : 0;
-    chart.data.datasets[1].label = `封装速度 ${config.unit}`;
-    chart.options.scales.speed.title.text = `速度 ${config.unit}`;
-    chart.update(changedView ? 'none' : undefined);
+    const { series, viewStart, viewEnd } = getMonitorSeries(history, capacity, selectedMonitorPhase);
+    for (const [name, colors] of Object.entries(monitorPhases)) {
+        const points = series[name];
+        const dimmed = selectedMonitorPhase && selectedMonitorPhase !== name;
+        const bar = chart.data.datasets.find(dataset => dataset.phase === name);
+        const line = speedChart.data.datasets.find(dataset => dataset.phase === name);
+        bar.data = points.map(point => ({ ...point, y: point.write_mbps }));
+        bar.backgroundColor = colors.bar + (dimmed ? '35' : 'ff');
+        line.data = points.map(point => ({ ...point, y: point.speed }));
+        line.borderColor = colors.line + (dimmed ? '45' : 'ff');
+        line.borderWidth = selectedMonitorPhase === name ? 3 : 2;
+        line.pointRadius = points.length === 1 ? 2 : 0;
+    }
+    chart.options.scales.x.min = speedChart.options.scales.x.min = viewStart;
+    chart.options.scales.x.max = speedChart.options.scales.x.max = viewEnd > viewStart ? viewEnd : viewStart + 1;
+    speedChart.options.scales.chunks.ticks.display = selectedMonitorPhase !== 'muxing';
+    speedChart.options.scales.mux.ticks.display = !selectedMonitorPhase || selectedMonitorPhase === 'muxing';
+    chart.update(changedTask ? 'none' : undefined);
+    speedChart.update(changedTask ? 'none' : undefined);
 }
 
 // --- 新增：播放器逻辑 ---

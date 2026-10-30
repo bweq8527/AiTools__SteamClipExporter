@@ -6,9 +6,9 @@ import re
 import math
 import time
 try:
-    from backend.telemetry import TaskMonitor, get_process_io_bytes
+    from backend.telemetry import TaskMonitor
 except ImportError:
-    from telemetry import TaskMonitor, get_process_io_bytes
+    from telemetry import TaskMonitor
 
 def get_ffmpeg_tool(name='ffmpeg.exe'):
     """适配打包路径的工具获取函数"""
@@ -124,6 +124,7 @@ def convert_clip(folder, out, status):
             set_stage(f'joining_{kind}', eta=f'正在拼接{label}分段', progress_indeterminate=False)
             monitor.start(f'joining_{kind}')
             track_bytes = 0
+            completed_chunks = 0
             with open(target, 'wb') as merged:
                 temporary_files.append(target)
                 for index, source in enumerate([init, *chunks]):
@@ -135,12 +136,14 @@ def convert_clip(folder, out, status):
                             merged.write(block)
                             copied_bytes += len(block)
                             track_bytes += len(block)
-                            monitor.record(processed_bytes=track_bytes)
+                            monitor.record(processed_bytes=track_bytes, completed_chunks=completed_chunks)
                             # 0–40% 按字节估算；init 不计入完成的 chunk 数。
                             status.update(progress=min(40, int(copied_bytes / total_bytes * 40)))
                     if index:
+                        completed_chunks = index
                         status.update(**{f'{kind}_done': index})
-            monitor.record(processed_bytes=track_bytes, force=True)
+                        monitor.record(processed_bytes=track_bytes, completed_chunks=completed_chunks)
+            monitor.record(processed_bytes=track_bytes, completed_chunks=completed_chunks, force=True)
 
         set_stage('probing', progress=40, eta='正在读取媒体时长', progress_indeterminate=True)
         duration = get_video_duration(tmp_v)
@@ -150,6 +153,7 @@ def convert_clip(folder, out, status):
                   eta='正在封装 MP4', progress_indeterminate=duration == 0)
         monitor.start('muxing')
         mux_speed = None
+        mux_bytes = None
 
         # 音频以视频的起始时间为参考，保留两路分段的相对偏移。
         # 不直接 copyts：大源时间戳会使 FFmpeg 的进度时间保持为零。
@@ -174,11 +178,21 @@ def convert_clip(folder, out, status):
                     seconds = max(status['processed_seconds'], int(value) / 1000000.0, 0)
                     progress = min(98, 40 + int(seconds / duration * 58)) if duration else 40
                     status.update(processed_seconds=seconds, progress=progress)
+                elif key == 'total_size' and re.fullmatch(r'\d+', value):
+                    mux_bytes = int(value)
                 elif key == 'speed' and re.fullmatch(r'\d+(?:\.\d+)?(?:[eE][+-]?\d+)?x', value) and math.isfinite(float(value[:-1])):
                     status.update(speed=value)
                     mux_speed = float(value[:-1])
                 elif key == 'progress':
-                    monitor.record(io_bytes=get_process_io_bytes(process), speed=mux_speed, force=value == 'end')
+                    output_bytes = mux_bytes
+                    if output_bytes is None:
+                        try:
+                            output_bytes = os.path.getsize(out)
+                        except OSError:
+                            pass
+                    monitor.record(output_bytes=output_bytes, speed=mux_speed, force=value == 'end')
+                    mux_bytes = None
+                    mux_speed = None
                     if value == 'end':
                         set_stage('finalizing', progress=99, eta='正在完成写入并确认结果', progress_indeterminate=True)
 

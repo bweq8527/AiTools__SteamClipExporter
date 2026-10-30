@@ -7,7 +7,7 @@
 | [main.py](../main.py) | 桌面入口；`get_base_path()`、`start_flask()`；创建 WebView 并配置窗口对象 | 导入 `backend.app.app`，启动 Flask 线程、pywebview 主循环 |
 | [backend/app.py](../backend/app.py) | Flask、静态页面、全部业务路由、内存状态和后台 worker | 直接调用文件系统、WebView、worker 的媒体函数 |
 | [backend/worker.py](../backend/worker.py) | 媒体工具定位、分段拼接、缩略图和导出进度 | `subprocess` 调用项目内 FFmpeg、FFprobe |
-| [backend/telemetry.py](../backend/telemetry.py) | `TaskMonitor` 有界任务采样、`get_process_io_bytes()` 查询 FFmpeg 程序 I/O | Python 标准库 ctypes／Windows API，无新增依赖；失败返回未知 |
+| [backend/telemetry.py](../backend/telemetry.py) | `TaskMonitor` 区间采样、`merge_history()` 时长加权合并 | Python 标准库；计数由 worker 提供，不再调用 Windows I/O API |
 | [backend/__init__.py](../backend/__init__.py) | 空包入口 | 允许 `backend.app` 导入 |
 | [frontend/index.html](../frontend/index.html) | 页面结构、按钮事件、日志面板、图表、视频弹层 | CDN Axios／Chart.js，本地 CSS／JS |
 | [frontend/script.js](../frontend/script.js) | 路径操作、选择、分组渲染、队列提交、轮询和播放 | Axios 调 Flask，Chart.js 画图，HTML video 播放流 |
@@ -44,11 +44,11 @@
 - 播放：`openPlayer()`、`closePlayer()`；悬停 800ms 创建静音循环 video，均使用 `/api/stream/<cid>`。
 - 日志和时间：`log()`、`getFormattedTime()`、`formatDate()`；不要把前端时间戳误认为后端持久日志。
 - 任务详情：`renderQueueProgress()` 通过文本节点显示阶段、两轨段数、错误／清理警告及估算进度；`formatMediaTime()` 格式化媒体秒数。未知时长使用不定进度条，旧响应仍可展示。
-- 用时：`convert_clip()` 通过内部 `set_stage()` 用单调时钟记阶段边界；`get_progress_snapshot()` 每次轮询计算总用时、阶段用时，屏蔽内部计时数据。前端显示总用时及四步用时（准备／收尾并入首末），完成／失败冻结；速度为拼接 MB/s 或封装 x。
+- 用时：`convert_clip()` 通过内部 `set_stage()` 用单调时钟记阶段边界；`get_progress_snapshot()` 每次轮询计算总用时、阶段用时，屏蔽内部计时数据。前端显示总用时及四步用时（准备／收尾并入首末），完成／失败冻结；速度为拼接完整片段 个/s 或封装 x。
 
-后续四步改版：报告仅显示四步，准备／收尾合并到首末步骤用时。`initChart()` 创建双轴柱线图；`selectMonitorTask()` 切换任务，`refreshTaskMonitor()` 维护自动跟随、阶段查看、指标、颜色和真实采样窗口。任务条支持鼠标、Enter／空格；切换只影响展示，不影响队列。视频蓝、音频绿、封装橙，折线同色系低饱和；读取时长暂停采样。
+后续四步改版：报告仅显示四步，准备／收尾合并到首末步骤用时。`initChart()` 创建上方 MB/s 柱形与下方个/s／x 折线两个 Chart，坐标范围同步，左右轴固定留白；`getMonitorSeries()` 按覆盖时长平均生成等时间显示窗口，柱宽固定 3 CSS px；`selectMonitorTask()` 切换任务，`refreshTaskMonitor()` 累加区间秒数省略等待，维护自动跟随、阶段放大／高亮、指标及颜色。任务条支持鼠标、Enter／空格；切换只影响展示，不影响队列。视频蓝、音频绿、封装橙，折线同色系低饱和；读取时长暂停采样。
 
-回退记录：用户要求退回上一版，已恢复单阶段最近 120 点、原渐变背景、独立左右轴及阶段切换；连续图、仅高亮、dt 区间柱宽和 600 点聚合均已撤销。
+此前回退为历史；本轮用户重新授权：图表背景改为 #252525，视频／音频／封装三阶段连续排列，读取时长等待不占横轴；真实总用时不变。柱形仅为文件写入 MB/s；折线分别为视频片段 个/s、音频片段 个/s、封装 x，init 不计片段。阶段按钮仅高亮，再点取消，任务选择与跟随保留。每阶段最多 600 个区间；超限按相邻区间用时加权合并，保留完整时间范围但较早峰值变为均值。Point 增加 dt/write_mbps，t 仍为真实任务秒数；图表按 dt 累加省略等待。MB/s、个/s、x 分轴，不归一化，高亮不改刻度。拼接按实际写入字节和完整 chunk 差值采样；封装使用 FFmpeg total_size，缺失时只读输出文件大小，不再查询 Windows 进程总 I/O。写入可能含系统缓存，不等于物理落盘速率；未知为 null。
 
 ## 按功能定位修改入口
 
@@ -62,3 +62,5 @@
 | 记忆／交接 | 根入口及 INDEX 指定的主要维护文档 | 不把文档工作扩大为业务修复 |
 
 新增功能前按需求与开发规范确认方案；本表只提供定位，不代表修改授权。
+
+阶段放大补充：getMonitorSeries(history, capacity, focusedPhase=null) 返回 viewStart/viewEnd 和所选阶段的重采样；refreshTaskMonitor() 同步两图 min/max 与原始单位的自动纵轴。未开始／无音轨阶段禁用；同标签返回全程，任务切换／跟随清除选择，原始历史不修改。

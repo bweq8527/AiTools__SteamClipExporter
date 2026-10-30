@@ -86,13 +86,13 @@ Flask 同时通过静态目录提供 `/script.js`、`/style.css` 等资源；不
 | `elapsed_seconds` | 执行后的总实际用时（秒），不含排队，包含清理；单调时钟计算，终态冻结 |
 | `stage_elapsed_seconds` | 当前／最后阶段实际用时（秒）；运行时随轮询更新 |
 | `stage_durations` | `{[stage]: seconds}`；已完成阶段及当前阶段用时，未开始／跳过的阶段无条目，与媒体时长不同 |
-| `performance_history` | `{joining_video?:Point[],joining_audio?:Point[],muxing?:Point[]}`，每阶段最近 120 个真实采样；开始运行后提供，无持久化 |
-| `disk_mbps` | number 或 null；最近采样的程序读＋写速率，MB 按 1,000,000 字节；不是整盘物理活动率，查询不可用时为 null |
-| `processing_speed` / `speed_unit` | 最近采样的处理速度／单位；拼接为复制 MB/s，封装为 FFmpeg 倍速 `x`；换阶段时重置 |
+| `performance_history` | `{joining_video?:Point[],joining_audio?:Point[],muxing?:Point[]}`，每阶段最多 600 个区间，超限加权合并但保留完整时间范围；无持久化 |
+| `write_mbps` / `disk_mbps` | number 或 null；最近采样区间的文件写入 MB/s（1 MB = 1,000,000 字节）；disk_mbps 保留字段名但语义改为仅写入，不再含读取；含缓存，未知为 null |
+| `processing_speed` / `speed_unit` | 最近采样的处理速度／单位；拼接为完整片段 `个/s`（init 不计），封装为 FFmpeg 倍速 `x`；换阶段时重置 |
 
-`Point` 为 `{t:number,disk_mbps:number|null,speed:number|null}`，t 是任务开始后的实际秒数。拼接约每 0.5 秒及阶段结束采样；柱形为读＋写量，折线为复制量。封装在 FFmpeg progress 批次末采样，使用 Windows 进程 I/O 及 FFmpeg speed；失败／非 Windows 为未知。准备、读取时长及收尾不采样。
+`Point` 为 `{t:number,dt:number,write_mbps:number|null,disk_mbps:number|null,speed:number|null}`；t 为真实任务秒数，dt 为区间秒数。拼接约每 0.5 秒及阶段末采样；末尾不足 0.5 秒合入上一采样，避免极短区间的片段计数尖峰。拼接按实际写入字节和完整 chunk 差值采样；封装使用 FFmpeg total_size，缺失时只读输出文件大小，不再查询 Windows 进程总 I/O。写入可能含系统缓存，不等于物理落盘速率；未知为 null。 准备、读取时长及收尾不采样。每阶段最多 600 个区间；超限按相邻区间用时加权合并，保留完整时间范围但较早峰值变为均值。Point 增加 dt/write_mbps，t 仍为真实任务秒数；图表按 dt 累加省略等待。MB/s、个/s、x 分轴，不归一化，高亮不改刻度。
 
-当前已按用户要求退回上一版：按阶段查看最近 120 点，左右轴独立缩放；背景为原渐变，阶段按钮切换显示内容。连续全程图、共同 MB/s 轴、高亮与区间聚合已撤销。
+当前连续图由本轮用户重新确认：图表背景改为 #252525，视频／音频／封装三阶段连续排列，读取时长等待不占横轴；真实总用时不变。柱形仅为文件写入 MB/s；折线分别为视频片段 个/s、音频片段 个/s、封装 x，init 不计片段。阶段按钮仅高亮，再点取消，任务选择与跟随保留。 需重启后产生新采样，不混用旧指标。
 
 报告仍保留内部阶段，前端仅显示四步：拼接视频文件、拼接音频文件、读取媒体时长、封装媒体文件。准备时间并入视频拼接、收尾时间并入封装；完成是任务状态，不列为第五步。
 
@@ -108,3 +108,7 @@ Flask 同时通过静态目录提供 `/script.js`、`/style.css` 等资源；不
 - API 默认无鉴权，启用 `CORS(app)`。不应据此扩展为对外服务。许多输入异常由 Flask 处理，具体 4xx／5xx 取决于异常和 Flask 版本，不承诺统一 JSON 错误。
 - 前端多处空 `catch`，有些错误只显示通用日志，`openExportDir()` 未 await 请求。不能把“界面无提示”视为操作成功。
 - 2026-10-29 已用 Flask test client 验证目录配置／入队、选择器参数／取消和预览清理；真实 FFmpeg 预览输出亦已解码核对。未启动真实 HTTP 服务或操作原生选择器。其他路由仍主要是静态契约核对。回归入口见 `tests/test_export.py`、`tests/test_preview.py`。
+
+2026-10-30 后续上下分图／固定细柱仅修改前端，以上 Point／API 契约不变。`dt` 用于时间加权，不直接决定柱宽；前端 getMonitorSeries() 对原历史重采样，上下两图共用省略等待的连续时间范围。后端最新采样数值卡片仍显示原始最后区间，悬停图中值为显示窗口均值。
+
+阶段放大仅前端：所选阶段使用完整绘图容量，其他阶段数据不送入当前图表，横轴 min/max 为所选阶段在连续处理时间中的起止值；同标签返回完整范围。Point／接口不变，原始历史不截断、不归一化，纵轴按可见数据自动调整。

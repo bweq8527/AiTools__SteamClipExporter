@@ -114,7 +114,7 @@ button:disabled { background: #444; cursor: not-allowed; }
 .q-selected { background: #263747; box-shadow: inset 0 0 0 1px #5a829f; }
 .q-item:focus-visible { outline: 2px solid #8bc9f8; outline-offset: 2px; }
 .task-box { padding: 16px; }
-.task-monitor { --monitor-color: #2798f5; flex-shrink: 0; margin-top: 12px; padding: 12px; border: 1px solid #2c3e4d; border-radius: 6px; background: linear-gradient(155deg, #1c2b39, #14202b); }
+.task-monitor { --monitor-color: #2798f5; flex-shrink: 0; margin-top: 12px; padding: 12px; border: 1px solid #383838; border-radius: 6px; background: #252525; }
 .monitor-header { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .monitor-caption { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 10px; color: #acbdca; }
 .monitor-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--monitor-color); flex-shrink: 0; }
@@ -127,13 +127,21 @@ button:disabled { background: #444; cursor: not-allowed; }
 .metric-label { display: block; font-size: 10px; color: #8ca0b1; }
 .monitor-metrics strong { display: block; margin-top: 3px; color: #edf5fa; font-size: 17px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .monitor-metrics > div:last-child strong { font-size: 12px; }
-.monitor-canvas { height: 150px; position: relative; margin: 8px -6px 0; }
+.monitor-canvas { position: relative; margin: 8px -6px 0; }
+.monitor-plot { position: relative; margin: 0; padding: 0; }
+.monitor-plot canvas { display: block; }
+.monitor-bars { height: 140px; }
+.monitor-lines { height: 100px; margin-top: -1px; }
+.monitor-plot-label { display: flex; justify-content: space-between; padding: 3px 12px; color: #aaa; font-size: 10px; }
+.monitor-plot-label span:first-child { color: #aaa; }
+.monitor-plot-label span:last-child { color: #c6ad91; }
 .monitor-empty { position: absolute; inset: 40px 35px; display: grid; place-items: center; pointer-events: none; font-size: 10px; color: #8496a5; text-align: center; }
 .monitor-empty[hidden] { display: none; }
 .monitor-phases { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .monitor-phases button { padding: 4px 6px; background: transparent; border: 1px solid #354653; color: #8296a6; font-size: 10px; }
 .monitor-phases button::before { content: ''; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--phase-color); margin-right: 4px; }
-.monitor-phases button.active { background: #293d4d; border-color: var(--phase-color); color: #dae8f2; }
+.monitor-phases button.active { background: #3a3a3a; border-color: var(--phase-color); color: #dae8f2; }
+.monitor-phases button:disabled { opacity: 0.4; background: transparent; cursor: default; }
 .monitor-note { color: #7f93a4; font-size: 9px; line-height: 1.7; margin-top: 9px; }
 @keyframes monitor-pulse { 50% { opacity: 0.35; box-shadow: 0 0 8px var(--monitor-color); } }
 @media (prefers-reduced-motion: reduce) { .is-live .monitor-dot { animation: none; } }

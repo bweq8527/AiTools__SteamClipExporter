@@ -74,16 +74,18 @@
                         </div>
                         <div id="monitor-task" class="monitor-task">等待导出任务</div>
                         <div class="monitor-metrics">
-                            <div><span class="metric-label">磁盘读写</span><strong id="monitor-disk">— MB/s</strong></div>
-                            <div><span class="metric-label">封装速度</span><strong id="monitor-speed">— MB/s</strong></div>
+                            <div><span class="metric-label">文件写入速度</span><strong id="monitor-disk">— MB/s</strong></div>
+                            <div><span id="monitor-speed-label" class="metric-label">视频片段处理速度</span><strong id="monitor-speed">— 个/s</strong></div>
                             <div><span class="metric-label">总用时</span><strong id="monitor-time">00:00</strong></div>
                         </div>
                         <div class="monitor-canvas">
-                            <canvas id="chart"></canvas>
-                            <div id="monitor-empty" class="monitor-empty">该阶段暂无采样数据</div>
+                            <div class="monitor-plot-label"><span>写入 MB/s ↑</span><span>片段 个/s／封装 x ↓</span></div>
+                            <div class="monitor-plot monitor-bars"><canvas id="chart" aria-label="文件写入速度，固定宽度柱形"></canvas></div>
+                            <div class="monitor-plot monitor-lines"><canvas id="speed-chart" aria-label="处理速度，数值从上向下增大"></canvas></div>
+                            <div id="monitor-empty" class="monitor-empty">等待任务采样数据</div>
                         </div>
                         <div id="monitor-phases" class="monitor-phases"></div>
-                        <div class="monitor-note">柱形：读写 MB/s · 折线：拼接 MB/s／封装 x<br>当前任务的程序 I/O，可能包含系统缓存；点击任务条切换</div>
+                        <div class="monitor-note">上方固定细柱：写入 MB/s · 下方折线：片段 个/s／封装 x，向下数值增大<br>两图共用处理时间，省略等待，总用时仍含等待；采样按时间窗口显示均值，写入可能含缓存。阶段按钮放大／返回全程，任务条切换</div>
                     </div>
                     <div class="scroll-area" id="qList"></div>
                 </div>

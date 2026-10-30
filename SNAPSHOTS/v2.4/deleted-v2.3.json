@@ -1,0 +1,9 @@
+{
+  "version": "v2.3",
+  "status": "deleted",
+  "user_request": "保存v2.4快照，删除v2.3快照",
+  "deleted_after": "v2.4 archive and source verification PASS",
+  "former_manifest_sha256": "9f58fc455647cec85ed010f94d1d11405a9b2f73b0d7355b61ff1bf4bb344159",
+  "record_date": "2026-10-30 Asia/Hong_Kong",
+  "note": "Only SNAPSHOTS/v2.3 was removed. The v2.4 archive excludes all SNAPSHOTS and does not retain the deleted archive."
+}
