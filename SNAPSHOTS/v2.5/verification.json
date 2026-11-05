@@ -1,0 +1,32 @@
+{
+  "version": "v2.5",
+  "verified_at_utc": "2026-11-05T23:25:52.786869+00:00",
+  "archive_members": "PASS",
+  "directory_set": "PASS",
+  "archive_file_hashes": "PASS",
+  "source_file_hashes": "PASS",
+  "source_file_and_directory_set": "PASS",
+  "file_count": 61,
+  "directory_count": 11,
+  "total_file_bytes": 270576652,
+  "archive_sha256": "9f16b62e5db82b70c0db31815bb07648683e7c2618920d0df00a2ba0548997d3",
+  "manifest_sha256": "6ee69f51182b4bd2c445d01d2ba04732b74b752b85716d8af1c5417866c80566",
+  "note": "Verified before registration edits and old-snapshot deletion. No application/tests run.",
+  "final_archive_reverification": "PASS",
+  "previous_snapshot_directories_absent": [
+    "v2.1",
+    "v2.2",
+    "v2.3",
+    "v2.4"
+  ],
+  "post_capture_registration_changed_source_files": [
+    "AGENTS/CHANGELOG.md",
+    "AGENTS/CURRENT_STATE.md",
+    "AGENTS/HANDOFF.md",
+    "AGENTS/INDEX.md",
+    "AGENTS/REQUIREMENTS.md",
+    "AGENTS.md"
+  ],
+  "post_capture_new_task_document": "AGENTS/TASKS/COMPLETED/2026-11-06-v2.5-snapshot.md",
+  "non_registration_source_files_unchanged": "PASS"
+}

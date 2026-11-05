@@ -1,5 +1,11 @@
 # 模块与代码地图
 
+## 2026-11-06 入口补充
+
+- `backend/metadata.py:get_clip_metadata()`：视频首尾分段包时间范围及两轨大小估计；`app.py:clip_metadata()` 校验库／素材直接子目录。`PREVIOUS_TASK_SECONDS` 保留重排队前耗时，`get_prog()` 返回累计值。
+- 前端 `expandedTaskIds` 保持详情展开状态，`clipMetadataRequests` 按库／cid 合并缓存悬停请求，`formatFileSize()` 显示二进制单位；扫描清缓存。
+- `tests/test_metadata.py` 定向覆盖合成时间戳、异常、路径、累计重试；前端测试补充折叠／轮询、悬停缓存与切库。
+
 路径均相对项目根目录，链接可定位文件；优先在 IDE 搜索函数名。当前源码很小，未分出服务层或数据访问层，不应描述为已有这些架构层。
 
 | 文件 | 职责与关键入口 | 调用／依赖 |
@@ -20,6 +26,8 @@
 | [tests/test_progress.py](../tests/test_progress.py) | 导出阶段、分段计数、媒体时间／速度、失败终态与清理警告 | 隔离文件＋外部进程边界替身；真实媒体由 test_export 回归 |
 | `bin/`、`app_icon.ico` | 媒体可执行文件／压缩包、桌面图标 | exe 是否随版本保存见交接；不执行未知二进制进行文档核对 |
 | `backend/__pycache__/`、`.idea/` | Python 缓存、IDE 配置 | 部分已纳入 Git，非业务源码；本轮不清理 |
+- 悬停展示后续改为 body 顶层单例：showClipMetadata()／moveClipMetadata()／hideClipMetadata()，按鼠标视口坐标定位、边缘换侧；移出等事件隐藏，metadataTarget 避免迟到响应重开或覆盖其他卡片。
+
 
 ## 后端关键函数与状态
 

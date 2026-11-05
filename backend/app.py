@@ -22,8 +22,10 @@ app = Flask(__name__, static_folder=get_res_path('frontend'), static_url_path=''
 CORS(app)
 
 try:
+    from backend.metadata import get_clip_metadata
     from backend.worker import convert_clip, generate_quick_thumb, get_ffmpeg_tool, get_hide_config, get_progress_snapshot
 except ImportError:
+    from metadata import get_clip_metadata
     from worker import convert_clip, generate_quick_thumb, get_ffmpeg_tool, get_hide_config, get_progress_snapshot
 
 log = logging.getLogger('werkzeug')
@@ -34,6 +36,8 @@ CONVERSION_STATUS = {}
 CURRENT_CLIP_PATH = None
 EXPORT_PATH = None
 PYTHON_LOGS = []
+PREVIOUS_TASK_SECONDS = 0.0
+STATUS_LOCK = threading.RLock()
 
 
 def add_py_log(msg):
@@ -240,23 +244,41 @@ def list_c():
             })
     except Exception as e:
         add_py_log(f"扫描错误: {str(e)}")
-    return jsonify({"clips": clips})
+    return jsonify({"clips": clips, "library": os.path.realpath(CURRENT_CLIP_PATH)})
+
+
+@app.route('/api/metadata/<cid>')
+def clip_metadata(cid):
+    root = os.path.realpath(CURRENT_CLIP_PATH) if CURRENT_CLIP_PATH else None
+    if request.args.get('library') and request.args['library'] != root:
+        return jsonify({'message': '素材库已切换，请重新扫描'}), 409
+    if not root or not cid.startswith('clip_') or '/' in cid or '\\' in cid:
+        return jsonify({'message': '素材不存在'}), 404
+    folder = os.path.realpath(os.path.join(root, cid))
+    if os.path.dirname(folder) != root or not os.path.isdir(folder):
+        return jsonify({'message': '素材不存在'}), 404
+    return jsonify(get_clip_metadata(folder))
 
 
 @app.route('/api/queue', methods=['POST'])
 def add_q():
+    global PREVIOUS_TASK_SECONDS
     ids = request.json.get('clip_ids', [])
-    for cid in ids:
-        status_info = CONVERSION_STATUS.get(cid, {})
-        if status_info.get('status') not in ['pending', 'running']:
-            CONVERSION_STATUS[cid] = {'status': 'pending', 'progress': 0, 'eta': '排队中'}
-            target_dir = EXPORT_PATH if EXPORT_PATH else CURRENT_CLIP_PATH
-            CONVERSION_QUEUE.put((os.path.join(CURRENT_CLIP_PATH, cid), os.path.join(target_dir, f"{cid}.mp4"), cid))
-            add_py_log(f"加入队列: {cid}")
+    with STATUS_LOCK:
+        for cid in ids:
+            status_info = CONVERSION_STATUS.get(cid, {})
+            if status_info.get('status') not in ['pending', 'running']:
+                PREVIOUS_TASK_SECONDS += get_progress_snapshot(status_info).get('elapsed_seconds', 0)
+                CONVERSION_STATUS[cid] = {'status': 'pending', 'progress': 0, 'eta': '排队中'}
+                target_dir = EXPORT_PATH if EXPORT_PATH else CURRENT_CLIP_PATH
+                CONVERSION_QUEUE.put((os.path.join(CURRENT_CLIP_PATH, cid), os.path.join(target_dir, f"{cid}.mp4"), cid))
+                add_py_log(f"加入队列: {cid}")
     return jsonify({"success": True})
 
 
 @app.route('/api/progress')
 def get_prog():
-    statuses = {cid: get_progress_snapshot(status) for cid, status in list(CONVERSION_STATUS.items())}
-    return jsonify({"all_statuses": statuses, "py_logs": PYTHON_LOGS})
+    with STATUS_LOCK:
+        statuses = {cid: get_progress_snapshot(status) for cid, status in list(CONVERSION_STATUS.items())}
+        total = PREVIOUS_TASK_SECONDS + sum(s.get('elapsed_seconds', 0) for s in statuses.values())
+    return jsonify({"all_statuses": statuses, "py_logs": PYTHON_LOGS, "total_elapsed_seconds": total})

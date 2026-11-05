@@ -4,6 +4,8 @@ let viewMode = 'flat';
 let currentAlbum = null;
 let pathUpdate = Promise.resolve();
 let monitorStatuses = {}, selectedTaskId = null, selectedMonitorPhase = null;
+const expandedTaskIds = new Set(), clipMetadataRequests = new Map();
+let metadataTooltip = null, metadataTarget = null, metadataPointer = null;
 let followRunningTask = true, lastMonitorKey = '';
 const monitorPhases = {
     joining_video: { label: '拼接视频文件', bar: '#2798f5', line: '#8caec9', unit: '个/s' },
@@ -218,8 +220,6 @@ function refreshTaskMonitor() {
     document.getElementById('monitor-speed-label').textContent = phase === 'muxing' ? '封装倍速' : phase === 'joining_video' ? '视频片段处理速度' : '音频片段处理速度';
     document.getElementById('monitor-speed').textContent = `${formatRate(last?.speed)} ${config.unit}`;
     document.getElementById('monitor-time').textContent = formatMediaTime(s?.elapsed_seconds);
-    document.getElementById('monitor-empty').hidden = available.length > 0;
-    document.getElementById('monitor-empty').textContent = '等待任务采样数据';
     document.getElementById('monitor-panel').style.setProperty('--monitor-color', config.bar);
     document.getElementById('monitor-panel').classList.toggle('is-live', live);
     document.getElementById('monitor-follow').classList.toggle('active', followRunningTask);
@@ -351,6 +351,8 @@ async function load(verbose = false) {
         const res = await axios.get('/api/clips');
         const oldLen = allClips.length;
         allClips = res.data.clips;
+        allClips.forEach(c => { c.library = res.data.library; });
+        if (verbose) clipMetadataRequests.clear();
         const available = new Set(allClips.filter(c => !c.is_converted).map(c => c.id));
         sel = sel.filter(id => available.has(id));
         document.getElementById('qBtn').disabled = sel.length === 0;
@@ -363,6 +365,7 @@ async function load(verbose = false) {
 }
 
 function renderList() {
+    hideClipMetadata();
     const div = document.getElementById('list');
     const selectAllBtn = document.getElementById('allBtn');
     div.innerHTML = '';
@@ -398,6 +401,39 @@ function renderList() {
     }
 }
 
+function hideClipMetadata() {
+    metadataTarget = null;
+    if (metadataTooltip) metadataTooltip.hidden = true;
+}
+
+function moveClipMetadata(event) {
+    if (!metadataTarget || !metadataTooltip) return;
+    metadataPointer = { clientX: event.clientX, clientY: event.clientY };
+    const { width, height } = metadataTooltip.getBoundingClientRect();
+    let left = event.clientX + 14, top = event.clientY + 16;
+    if (left + width > window.innerWidth - 8) left = event.clientX - width - 14;
+    if (top + height > window.innerHeight - 8) top = event.clientY - height - 16;
+    metadataTooltip.style.left = `${Math.max(8, left)}px`;
+    metadataTooltip.style.top = `${Math.max(8, top)}px`;
+}
+
+function showClipMetadata(event, target) {
+    if (!metadataTooltip) {
+        metadataTooltip = document.createElement('div');
+        metadataTooltip.id = 'clip-metadata-tooltip';
+        metadataTooltip.className = 'clip-metadata';
+        metadataTooltip.setAttribute('role', 'tooltip');
+        document.body.appendChild(metadataTooltip);
+        document.addEventListener('scroll', hideClipMetadata, true);
+        window.addEventListener('resize', hideClipMetadata);
+        window.addEventListener('blur', hideClipMetadata);
+    }
+    metadataTarget = target;
+    metadataTooltip.textContent = '时长：读取中…\n预计大小：读取中…';
+    metadataTooltip.hidden = false;
+    moveClipMetadata(event);
+}
+
 function createClipEl(c) {
     const el = document.createElement('div');
     el.className = `item ${c.is_converted?'done':''} ${sel.includes(c.id)?'selected':''}`;
@@ -417,7 +453,23 @@ function createClipEl(c) {
     const hoverBox = el.querySelector('.hover-preview');
 
     let previewTimer;
-    imgBox.onmouseenter = () => {
+    imgBox.onmouseenter = event => {
+        showClipMetadata(event, imgBox);
+        const key = JSON.stringify([c.library, c.id]);
+        if (!clipMetadataRequests.has(key)) {
+            const request = axios.get(`/api/metadata/${encodeURIComponent(c.id)}`, { params: { library: c.library } })
+                .then(res => res.data).catch(() => {
+                    if (clipMetadataRequests.get(key) === request) clipMetadataRequests.delete(key);
+                    return {};
+                });
+            clipMetadataRequests.set(key, request);
+        }
+        clipMetadataRequests.get(key).then(data => {
+            if (metadataTarget !== imgBox) return;
+            const duration = Number.isFinite(data.duration_seconds) && data.duration_seconds > 0 ? formatMediaTime(data.duration_seconds) : '未知';
+            metadataTooltip.textContent = `时长：${duration}\n预计大小：${formatFileSize(data.estimated_size_bytes)}`;
+            moveClipMetadata(metadataPointer);
+        });
         previewTimer = setTimeout(() => {
             const v = document.createElement('video');
             v.src = `/api/stream/${c.id}?type=preview`;
@@ -429,7 +481,9 @@ function createClipEl(c) {
             hoverBox.style.opacity = "1";
         }, 800);
     };
+    imgBox.onmousemove = moveClipMetadata;
     imgBox.onmouseleave = () => {
+        hideClipMetadata();
         clearTimeout(previewTimer);
         hoverBox.innerHTML = "";
         hoverBox.style.opacity = "0";
@@ -437,6 +491,7 @@ function createClipEl(c) {
 
     imgBox.onclick = (e) => {
         e.stopPropagation();
+        hideClipMetadata();
         openPlayer(c.id);
     };
 
@@ -474,6 +529,15 @@ function formatMediaTime(seconds) {
     return `${hours ? String(hours).padStart(2, '0') + ':' : ''}${minutes}:${remainder}`;
 }
 
+function formatFileSize(bytes) {
+    if (!Number.isFinite(bytes) || bytes < 0) return '未知';
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ['KiB', 'MiB', 'GiB', 'TiB'];
+    let value = bytes / 1024, index = 0;
+    while (value >= 1024 && index < units.length - 1) { value /= 1024; index++; }
+    return `${value.toFixed(1)} ${units[index]}`;
+}
+
 function renderQueueProgress(item, id, s) {
     const stages = {
         joining_video: '拼接视频文件', joining_audio: '拼接音频文件',
@@ -483,26 +547,39 @@ function renderQueueProgress(item, id, s) {
     item.className = `q-item${s.status === 'error' ? ' q-error' : s.status === 'finished' ? ' q-finished' : ''}`;
     item.tabIndex = 0;
     item.setAttribute('role', 'button');
-    item.setAttribute('aria-label', `查看任务 ${id} 的性能图表`);
-    item.onclick = () => selectMonitorTask(id);
+    item.setAttribute('aria-label', `展开或收起任务 ${id} 的详情并查看图表`);
+    item.setAttribute('aria-expanded', String(expandedTaskIds.has(id)));
+    const toggle = () => {
+        if (expandedTaskIds.has(id)) expandedTaskIds.delete(id);
+        else expandedTaskIds.add(id);
+        renderQueueProgress(item, id, s);
+        selectMonitorTask(id);
+    };
+    item.onclick = toggle;
     item.onkeydown = event => {
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            selectMonitorTask(id);
+            toggle();
         }
     };
+    let content = item;
     const addText = (tag, text, className = '') => {
         const element = document.createElement(tag);
         element.className = className;
         element.textContent = text;
-        item.appendChild(element);
+        content.appendChild(element);
         return element;
     };
-    addText('b', `${id}${s.status === 'finished' ? ' · 已完成' : ''}`, 'q-title');
+    addText('b', `${expandedTaskIds.has(id) ? '▾' : '▸'} ${id}${s.status === 'finished' ? ' · 已完成' : ''}`, 'q-title');
     const reportStage = s.stage === 'preparing' ? 'joining_video' :
         ['finalizing', 'finished'].includes(s.stage) ? 'muxing' : s.stage;
     const stage = stages[reportStage] || s.eta || '排队中';
     addText('div', s.status === 'error' ? `失败 · ${stage}` : stage, 'q-stage');
+    const details = document.createElement('div');
+    details.hidden = !expandedTaskIds.has(id);
+    details.className = 'q-details';
+    item.appendChild(details);
+    content = details;
     if (Number.isFinite(s.elapsed_seconds)) {
         addText('div', `总用时：${s.elapsed_seconds.toFixed(1)} 秒（不含排队）`, 'q-detail');
         const durations = { ...(s.stage_durations || {}) };
@@ -534,6 +611,7 @@ function renderQueueProgress(item, id, s) {
     }
     if (s.status === 'error') addText('div', s.eta || '导出失败，请查看日志', 'q-message');
     if (s.cleanup_warning) addText('div', `临时文件清理警告：${s.cleanup_warning}`, 'q-message');
+    content = item;
     const percent = Math.max(0, Math.min(100, Number.isFinite(s.progress) ? s.progress : 0));
     const indefinite = s.status === 'running' && s.progress_indeterminate;
     addText('div', indefinite ? '整体进度：当前阶段处理中' : `整体进度（估算）：${percent}%`, 'q-detail');
@@ -549,6 +627,8 @@ async function tick() {
         const res = await axios.get('/api/progress');
         const stats = res.data.all_statuses, pyl = res.data.py_logs;
         monitorStatuses = stats;
+        const total = res.data.total_elapsed_seconds ?? Object.values(stats).reduce((sum, s) => sum + (Number.isFinite(s.elapsed_seconds) ? s.elapsed_seconds : 0), 0);
+        document.getElementById('monitor-total-time').textContent = formatMediaTime(total);
         if(pyl.length > pyIdx) {
             for(let i=pyIdx; i<pyl.length; i++) {
                 const msg = pyl[i];

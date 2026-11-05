@@ -1,0 +1,15 @@
+{
+  "version": "v2.5",
+  "deleted_at_utc": "2026-11-05T23:26:27.2632816Z",
+  "deleted_directories": [
+    "v2.1",
+    "v2.2",
+    "v2.4"
+  ],
+  "boundary_checks": "PASS",
+  "reparse_checks": "PASS",
+  "old_file_hash_checks": "PASS",
+  "previous_snapshots_absent": "PASS",
+  "v2_5_preserved": true,
+  "details": "deletion-plan.json"
+}

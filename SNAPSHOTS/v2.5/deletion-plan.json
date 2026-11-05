@@ -1,0 +1,86 @@
+{
+  "authorized_request": "Delete all previous snapshots after verifying current v2.5",
+  "targets": [
+    {
+      "directory": "v2.1",
+      "absolute_path": "D:\\_PersonalProjects\\SteamClipExporter\\SNAPSHOTS\\v2.1",
+      "files": [
+        {
+          "path": "SHA256SUMS.txt",
+          "size": 158,
+          "sha256": "c513198e02115631394ce213be9bef2c2995fa41ca7986bc19d747a71caf2089"
+        },
+        {
+          "path": "manifest.json",
+          "size": 9234,
+          "sha256": "6853921d848f69ad12eab7759b82f93c0293184b69e5cca342ed08bf65a8a36b"
+        },
+        {
+          "path": "project.zip",
+          "size": 270504370,
+          "sha256": "f2e75f56e5c2a238bdc3e4218079015c6d0d7dadd77022b08cda89c98a696b78"
+        }
+      ],
+      "directories": []
+    },
+    {
+      "directory": "v2.2",
+      "absolute_path": "D:\\_PersonalProjects\\SteamClipExporter\\SNAPSHOTS\\v2.2",
+      "files": [
+        {
+          "path": "SHA256SUMS.txt",
+          "size": 160,
+          "sha256": "8ca0c1c24a8f55df32761e7695e8c8d92a2e83faa0bb2ef94f507ffcbd473275"
+        },
+        {
+          "path": "manifest.json",
+          "size": 9726,
+          "sha256": "01d441908b492143d283297340dd37da687ef5bdfa4d2ef9b3cfb32af02b2c20"
+        },
+        {
+          "path": "project.zip",
+          "size": 147431606,
+          "sha256": "1d2140f49da8958e1f08ea9ef5445525e186f515ba78ded04ceb54e334278d83"
+        },
+        {
+          "path": "verification.json",
+          "size": 998,
+          "sha256": "fa844bbe3098fbb3b7ae4d30c5596e0185e1385f53eaff533584d917465f850d"
+        }
+      ],
+      "directories": []
+    },
+    {
+      "directory": "v2.4",
+      "absolute_path": "D:\\_PersonalProjects\\SteamClipExporter\\SNAPSHOTS\\v2.4",
+      "files": [
+        {
+          "path": "SHA256SUMS.txt",
+          "size": 160,
+          "sha256": "5737c4fb43e5db3e589a09446bebacd66fd7f57399016ecafd75554acf3d75b2"
+        },
+        {
+          "path": "deleted-v2.3.json",
+          "size": 446,
+          "sha256": "95cac46f95e07796dbdf290c3d4d80998f4c1218951270664e456b037efa4aae"
+        },
+        {
+          "path": "manifest.json",
+          "size": 10147,
+          "sha256": "968cdc2a1d998a5abeb0d0fd81d13976f840a7c8cb9bec3268b1c7291333e48c"
+        },
+        {
+          "path": "project.zip",
+          "size": 147441404,
+          "sha256": "be9cf8c815cff787e15a97efc27d204e537ea56cce0a4c834db893bc43cb2555"
+        },
+        {
+          "path": "verification.json",
+          "size": 1400,
+          "sha256": "a3789f57b8cb5588d728a8a007c9d8372c22aca2644b76f31126b93403e6766d"
+        }
+      ],
+      "directories": []
+    }
+  ]
+}

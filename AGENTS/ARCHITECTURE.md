@@ -1,5 +1,9 @@
 # 整体架构与启动
 
+## 2026-11-06 增量
+
+新增 `backend/metadata.py`，由悬停 HTTP 请求按需调用，不进入导出队列；系统临时目录保存 init＋首尾视频片段样本，FFprobe 退出后清理，不改源素材。前端按库／cid 缓存，扫描时失效。`PREVIOUS_TASK_SECONDS` 与现有任务状态共同提供进程内累计用时，无新依赖或持久化。
+
 依据：`main.py`、`backend/app.py`、`backend/worker.py`、`frontend/`、`build.py`、`run_server.bat`；基线见 [CURRENT_STATE.md](CURRENT_STATE.md)。下述为源码事实，运行成功与否见交接验证记录。
 
 ## 技术栈及组件

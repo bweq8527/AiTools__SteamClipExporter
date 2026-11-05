@@ -6,18 +6,22 @@ const path = require('node:path');
 
 function setup({ cancel = false, invalid = false, delayed = false, converted = false, statuses = {} } = {}) {
     const elements = {};
+    const metadataRequests = [];
     function element(tagName = 'div') {
         return {
-            tagName, value: '', innerText: '', childNodes: [], attributes: {}, _text: '',
+            tagName, value: '', innerText: '', childNodes: [], attributes: {}, style: {}, _text: '',
             set textContent(value) { this._text = String(value); this.childNodes = []; },
             get textContent() { return this._text + this.childNodes.map(child => child.textContent || '').join(''); },
             appendChild(child) { this.childNodes.push(child); },
             replaceChildren(...children) { this._text = ''; this.childNodes = children; },
             setAttribute(name, value) { this.attributes[name] = String(value); },
-            removeAttribute(name) { delete this.attributes[name]; }
+            removeAttribute(name) { delete this.attributes[name]; },
+            getBoundingClientRect() { return { width: 160, height: 55 }; },
+            querySelector(selector) { this.parts ||= {}; return this.parts[selector] ||= element(); }
         };
     }
     const document = {
+        body: element('body'),
         getElementById(id) {
             return elements[id] ||= element();
         },
@@ -29,8 +33,12 @@ function setup({ cancel = false, invalid = false, delayed = false, converted = f
     let release;
     let configurations = 0;
     const jobs = [];
-    const context = vm.createContext({ document, window: {}, setInterval() {}, console, axios: {
-        async get(url) {
+    const context = vm.createContext({ document, window: { innerWidth: 1200, innerHeight: 800, addEventListener() {} }, setInterval() {}, setTimeout() {}, clearTimeout() {}, console, axios: {
+        async get(url, options) {
+            if (url.startsWith('/api/metadata/')) {
+                metadataRequests.push({ url, library: options.params.library });
+                return { data: { duration_seconds: 125, estimated_size_bytes: 2 * 1024 * 1024 } };
+            }
             if (url === '/api/progress') return { data: { all_statuses: statuses, py_logs: [] } };
             if (url === '/api/select_folder') return { data: { success: !cancel, path: cancel ? '' : 'new-output' } };
             return { data: { clips: [{ id: 'clip_test', is_converted: converted }] } };
@@ -53,7 +61,7 @@ function setup({ cancel = false, invalid = false, delayed = false, converted = f
     vm.runInContext(fs.readFileSync(path.join(__dirname, '../frontend/script.js'), 'utf8'), context);
     // Rendering is outside these state/request-order tests; keep load() real.
     vm.runInContext('renderList = () => {}', context);
-    return { context, document, jobs, get output() { return output; }, release: () => release?.() };
+    return { context, document, jobs, metadataRequests, get output() { return output; }, release: () => release?.() };
 }
 
 test('choosing export directory applies it without clicking scan', async () => {
@@ -124,6 +132,44 @@ test('later output change cannot overtake an earlier queue action', async () => 
 function descendants(node) {
     return [node, ...node.childNodes.flatMap(descendants)];
 }
+
+test('hover shows full metadata, reuses requests and isolates libraries', async () => {
+    const ui = setup();
+    const card = ui.context.createClipEl({ id: 'clip_test', library: 'one' });
+    const image = card.querySelector('.img-box');
+    image.onmouseenter({ clientX: 100, clientY: 100 });
+    image.onmouseenter({ clientX: 100, clientY: 100 });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(ui.metadataRequests.length, 1);
+    const tooltip = ui.document.body.childNodes.find(node => node.id === 'clip-metadata-tooltip');
+    assert.match(tooltip.textContent, /02:05\s+预计大小：2.0 MiB/);
+    image.onmouseleave();
+    const other = ui.context.createClipEl({ id: 'clip_test', library: 'two' });
+    other.querySelector('.img-box').onmouseenter({ clientX: 200, clientY: 100 });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(ui.metadataRequests.length, 2);
+    assert.deepEqual(ui.metadataRequests.map(r => r.library), ['one', 'two']);
+    assert.equal(ui.context.formatFileSize(null), '未知');
+});
+
+test('task details toggle with click and keyboard and survive polling', async () => {
+    const ui = setup({ statuses: { clip_test: { status: 'running', stage: 'joining_video', elapsed_seconds: 65 } } });
+    await ui.context.tick();
+    const card = ui.document.getElementById('q-clip_test');
+    const details = () => descendants(card).find(node => node.className === 'q-details');
+    assert.equal(card.attributes['aria-expanded'], 'false');
+    assert.equal(details().hidden, true);
+    card.onclick();
+    assert.equal(details().hidden, false);
+    await ui.context.tick();
+    assert.equal(card.attributes['aria-expanded'], 'true');
+    assert.equal(details().hidden, false);
+    card.onkeydown({ key: 'Enter', preventDefault() {} });
+    assert.equal(details().hidden, true);
+    card.onkeydown({ key: ' ', preventDefault() {} });
+    assert.equal(details().hidden, false);
+    assert.equal(ui.document.getElementById('monitor-total-time').textContent, '01:05');
+});
 
 test('polling renders independent track counts, current stage and media progress', async () => {
     const ui = setup({ statuses: { clip_test: {

@@ -1,5 +1,11 @@
 # 前后端通信契约
 
+## 2026-11-06 接口增量
+
+- `/api/clips` 有效扫描响应新增 `library`（素材库 realpath），用于隔离悬停请求。
+- `GET /api/metadata/<cid>?library=<library>` 返回 `{duration_seconds:number|null,estimated_size_bytes:number|null}`。library 可省略；提供但与当前库不符时 409，素材不存在／路径越界时 404。按需用视频首尾分段包时间范围估计完整时长，两轨 init＋chunk 字节和估计导出大小。FFprobe 最长 15 秒，失败字段 null，保留已取得的大小；不是精确 MP4 大小承诺。
+- `/api/progress` 新增顶层 `total_elapsed_seconds`：本次启动所有实际执行用时，含失败与重新入队前尝试，不含排队。旧终态被覆盖前累加，再与当前各状态快照求和，重启归零。
+
 依据：`backend/app.py` 的路由装饰器及 `frontend/script.js` 的调用。服务默认本地 `http://127.0.0.1:5000`；前端使用相对 URL。普通数据经 Axios HTTP JSON 通信，图片／视频由浏览器直接请求。没有 WebSocket、SSE 或 pywebview JS bridge 的业务调用；原生目录选择由 HTTP 路由间接调用 WebView。
 
 ## 路由清单
